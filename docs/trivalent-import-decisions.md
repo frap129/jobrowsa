@@ -182,16 +182,53 @@ the 2026-08-13 mergability directive).
 
 | Arg | Value | File | Rationale |
 |---|---|---|---|
+| is_cfi | true | flags.gn | CFI enabled, matching Chromium's hardening intent |
+| use_cfi_cast | true | flags.gn | CFI-cast checks on top of CFI |
+| use_kerberos | true | flags.linux.gn | Pairs with disable-gssapi-to-enable-network-service-sandbox.patch: SPNEGO auth stays available while the network-service sandbox stays enabled |
+| v8_enable_drumbrake | true | flags.gn | V8 sandbox (drumbrake) |
+| use_webgpu_on_vulkan_via_gl_interop | false | flags.gn | Disable WebGPU-on-Vulkan interop path |
+| enable_vr | false | flags.gn | No VR support |
+| safe_browsing_use_unrar | false | flags.gn | Do not bundle unrar |
+| enable_swiftshader | false | flags.gn | Build without SwiftShader |
+| enable_swiftshader_vulkan | false | flags.gn | Build without SwiftShader Vulkan |
+| dawn_use_swiftshader | false | flags.gn | No SwiftShader fallback for Dawn |
+| angle_enable_swiftshader | false | flags.gn | No SwiftShader fallback for ANGLE |
+| build_dawn_tests | false | flags.gn | Skip Dawn tests |
+| enable_perfetto_unittests | false | flags.gn | Skip Perfetto unit tests |
+| angle_has_histograms | false | flags.gn | Skip ANGLE histograms |
+| rtc_link_pipewire | true | flags.linux.gn | Link pipewire for WebRTC capture (pairs with existing rtc_use_pipewire=true) |
 
 ### Skipped
 
 | Arg | Reason |
 |---|---|
+| use_qt6, moc_qt6_path | Qt-based UI; we build GTK |
+| system_libdir | Fedora multilib libdir |
+| custom_toolchain, host_toolchain, clang_base_path, clang_version, rust_sysroot_absolute, rust_bindgen_root, rustc_version | System-toolchain args; we use the pinned toolchain + sysroot |
+| use_sysroot=false | We keep use_sysroot=true |
+| target_cpu="arm64", use_v4l2_codec=true, use_vaapi=false | ARM64-only branch |
+| use_static_angle=true, angle_shared_libvulkan=false | Pinned-toolchain build already defaults to static/bundled ANGLE |
+| use_pulseaudio=true | PipeWire-first audio stack; pipewire-pulse remains reachable |
+| target_os, current_os | Redundant with our flow |
+| enable_shadow_call_stack | Commented out upstream |
 
 ### Already present
 
 | Arg | Value |
 |---|---|
+| is_official_build | true (flags.linux.gn) |
+| is_clang | true (flags.linux.gn) |
+| disable_fieldtrial_testing_config | true (flags.gn + flags.linux.gn) |
+| ffmpeg_branding | "Chrome" (flags.linux.gn) |
+| proprietary_codecs | true (flags.linux.gn) |
+| rtc_use_pipewire | true (flags.linux.gn) |
+| use_vaapi | true (flags.linux.gn) |
+| clang_use_chrome_plugins | false (flags.gn) |
+| treat_warnings_as_errors | false (flags.gn) |
+| chrome_pgo_phase | 0 (flags.gn) |
+| enable_reporting | false (flags.gn) |
+| enable_remoting | false (flags.gn) |
+| enable_widevine | true (flags.gn) |
 
 ## Validation
 
