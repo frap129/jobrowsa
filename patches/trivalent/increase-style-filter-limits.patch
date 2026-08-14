@@ -1,0 +1,315 @@
+Copyright 2026 The Trivalent Authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is
+distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and limitations under the License.
+---
+diff --git a/components/subresource_filter/core/common/flat/style_rule_index.fbs b/components/subresource_filter/core/common/flat/style_rule_index.fbs
+index 1af61d6b21..b42ee2be9d 100644
+--- a/components/subresource_filter/core/common/flat/style_rule_index.fbs
++++ b/components/subresource_filter/core/common/flat/style_rule_index.fbs
+@@ -15,7 +15,7 @@ table NameToSelectors {
+   // into the `selectors` is necessary.
+   // This is a 16-bit index, which is safe because we limit the number of
+   // explicit style rules to 65534 in the indexer.
+-  first_index : uint16 = 65535;
++  first_index : uint32 = 4294967295;
+ 
+   // Any remaining selectors are stored in a vector. The first index is
+   // treated differently because most rules only match one selector, and there
+@@ -23,7 +23,7 @@ table NameToSelectors {
+   // selector this way.
+   // Constraint: 65535 (implicit rule index) must NOT appear here. It will
+   // always be placed in `first_index` if present.
+-  more_indices : [uint16];
++  more_indices : [uint32];
+ }
+ 
+ // An index of style rules optimized for lookup. It's primarily a list of
+diff --git a/components/subresource_filter/core/common/style_rule_indexer.cc b/components/subresource_filter/core/common/style_rule_indexer.cc
+index 6313910d5c..6493168a90 100644
+--- a/components/subresource_filter/core/common/style_rule_indexer.cc
++++ b/components/subresource_filter/core/common/style_rule_indexer.cc
+@@ -23,13 +23,13 @@ flatbuffers::Offset<
+     flatbuffers::Vector<flatbuffers::Offset<flat::NameToSelectors>>>
+ BuildNameToRules(
+     flatbuffers::FlatBufferBuilder& builder,
+-    const std::map<std::string, std::vector<uint16_t>>& rules_map) {
++    const std::map<std::string, std::vector<uint32_t>>& rules_map) {
+   std::vector<flatbuffers::Offset<flat::NameToSelectors>> offsets;
+ 
+   for (const auto& [name, indices] : rules_map) {
+     auto name_offset = builder.CreateSharedString(name);
+     uint16_t first_index = StyleRuleIndexer::kImplicitStyleRuleIndex;
+-    flatbuffers::Offset<flatbuffers::Vector<uint16_t>> more_offset;
++    flatbuffers::Offset<flatbuffers::Vector<uint32_t>> more_offset;
+ 
+     if (!indices.empty()) {
+       // Ensure that if the implicit rule is in the list, that it goes to
+@@ -38,7 +38,7 @@ BuildNameToRules(
+           indices, StyleRuleIndexer::kImplicitStyleRuleIndex);
+       first_index =
+           has_implicit ? StyleRuleIndexer::kImplicitStyleRuleIndex : indices[0];
+-      std::vector<uint16_t> more;
++      std::vector<uint32_t> more;
+       more.reserve(indices.size() - 1);
+       std::ranges::copy_if(
+           indices.begin(), indices.end(), std::back_inserter(more),
+@@ -83,7 +83,7 @@ bool StyleRuleIndexer::AddStyleRuleFromProto(
+     }
+   }
+ 
+-  std::optional<uint16_t> rule_index = GetOrCreateStyleRuleIndex(
++  std::optional<uint32_t> rule_index = GetOrCreateStyleRuleIndex(
+       rule.selector(), /*is_site_specific=*/!rule.domains().empty(),
+       /*is_exclusion=*/is_exclusion, rule.classes(), rule.ids());
+ 
+@@ -98,13 +98,13 @@ bool StyleRuleIndexer::AddStyleRuleFromProto(
+                          rule.ids());
+ }
+ 
+-std::optional<uint16_t> StyleRuleIndexer::GetOrCreateStyleRuleIndex(
++std::optional<uint32_t> StyleRuleIndexer::GetOrCreateStyleRuleIndex(
+     const std::string& selector,
+     bool is_site_specific,
+     bool is_exclusion,
+     const google::protobuf::RepeatedPtrField<std::string>& classes,
+     const google::protobuf::RepeatedPtrField<std::string>& ids) {
+-  std::map<std::string, uint16_t>::iterator it =
++  std::map<std::string, uint32_t>::iterator it =
+       selector_to_index_.find(selector);
+   if (it != selector_to_index_.end()) {
+     // We have an existing index for this selector.
+@@ -143,7 +143,7 @@ std::optional<uint16_t> StyleRuleIndexer::GetOrCreateStyleRuleIndex(
+   return explicit_index;
+ }
+ 
+-std::optional<uint16_t> StyleRuleIndexer::CreateExplicitStyleRule(
++std::optional<uint32_t> StyleRuleIndexer::CreateExplicitStyleRule(
+     const std::string& selector) {
+   if (style_rules_.size() >= kImplicitStyleRuleIndex) {
+     LOG(ERROR) << "Maximum number of explicit style rules reached ("
+@@ -152,13 +152,13 @@ std::optional<uint16_t> StyleRuleIndexer::CreateExplicitStyleRule(
+     return std::nullopt;
+   }
+   auto selector_offset = builder_->CreateSharedString(selector);
+-  uint16_t rule_index = base::checked_cast<uint16_t>(style_rules_.size());
++  uint32_t rule_index = base::checked_cast<uint32_t>(style_rules_.size());
+   style_rules_.emplace_back(selector_offset);
+   return rule_index;
+ }
+ 
+ bool StyleRuleIndexer::IndexExclusionRule(
+-    uint16_t rule_index,
++    uint32_t rule_index,
+     const google::protobuf::RepeatedPtrField<
+         url_pattern_index::proto::DomainListItem>& domains) {
+   for (const url_pattern_index::proto::DomainListItem& domain_item : domains) {
+@@ -172,7 +172,7 @@ bool StyleRuleIndexer::IndexExclusionRule(
+ }
+ 
+ bool StyleRuleIndexer::IndexHidingRule(
+-    uint16_t rule_index,
++    uint32_t rule_index,
+     const google::protobuf::RepeatedPtrField<
+         url_pattern_index::proto::DomainListItem>& domains,
+     const google::protobuf::RepeatedPtrField<std::string>& classes,
+@@ -199,10 +199,10 @@ bool StyleRuleIndexer::IndexHidingRule(
+ }
+ 
+ void StyleRuleIndexer::AddToIndexMap(
+-    std::map<std::string, std::vector<uint16_t>>& map,
++    std::map<std::string, std::vector<uint32_t>>& map,
+     std::string_view key,
+-    uint16_t val) {
+-  std::vector<uint16_t>& vec = map[std::string(key)];
++    uint32_t val) {
++  std::vector<uint32_t>& vec = map[std::string(key)];
+   if (vec.empty() || vec.back() != val) {
+     vec.emplace_back(val);
+   }
+@@ -219,7 +219,7 @@ flatbuffers::Offset<flat::StyleRuleIndex> StyleRuleIndexer::Finish() {
+   StyleRuleBloomFilterBuilder bloom_builder(class_map_.size() + id_map_.size());
+ 
+   auto populate_bloom =
+-      [&](const std::map<std::string, std::vector<uint16_t>>& rules_map) {
++      [&](const std::map<std::string, std::vector<uint32_t>>& rules_map) {
+         for (const auto& [name, indices] : rules_map) {
+           if (!name.empty()) {
+             std::string_view name_without_prefix =
+diff --git a/components/subresource_filter/core/common/style_rule_indexer.h b/components/subresource_filter/core/common/style_rule_indexer.h
+index 1979d1371a..7f390bb6e1 100644
+--- a/components/subresource_filter/core/common/style_rule_indexer.h
++++ b/components/subresource_filter/core/common/style_rule_indexer.h
+@@ -27,7 +27,7 @@ class StyleRuleIndexer {
+   // The style rule index used for implicit selectors. Implicit selectors
+   // aren't explicitly listed in the flatbuffer because the class name or id is
+   // sufficient for generating the entire selector.
+-  static constexpr uint16_t kImplicitStyleRuleIndex = 65535;
++  static constexpr uint32_t kImplicitStyleRuleIndex = 4294967295;
+ 
+   explicit StyleRuleIndexer(flatbuffers::FlatBufferBuilder* builder);
+ 
+@@ -47,40 +47,40 @@ class StyleRuleIndexer {
+  private:
+   using FlatStringOffset = flatbuffers::Offset<flatbuffers::String>;
+ 
+-  std::optional<uint16_t> GetOrCreateStyleRuleIndex(
++  std::optional<uint32_t> GetOrCreateStyleRuleIndex(
+       const std::string& selector,
+       bool is_site_specific,
+       bool is_exclusion,
+       const google::protobuf::RepeatedPtrField<std::string>& classes,
+       const google::protobuf::RepeatedPtrField<std::string>& ids);
+ 
+-  std::optional<uint16_t> CreateExplicitStyleRule(const std::string& selector);
++  std::optional<uint32_t> CreateExplicitStyleRule(const std::string& selector);
+ 
+   bool IndexExclusionRule(
+-      uint16_t rule_index,
++      uint32_t rule_index,
+       const google::protobuf::RepeatedPtrField<
+           url_pattern_index::proto::DomainListItem>& domains);
+ 
+   bool IndexHidingRule(
+-      uint16_t rule_index,
++      uint32_t rule_index,
+       const google::protobuf::RepeatedPtrField<
+           url_pattern_index::proto::DomainListItem>& domains,
+       const google::protobuf::RepeatedPtrField<std::string>& classes,
+       const google::protobuf::RepeatedPtrField<std::string>& ids);
+ 
+-  void AddToIndexMap(std::map<std::string, std::vector<uint16_t>>& map,
++  void AddToIndexMap(std::map<std::string, std::vector<uint32_t>>& map,
+                      std::string_view key,
+-                     uint16_t val);
++                     uint32_t val);
+ 
+   std::vector<FlatStringOffset> style_rules_;
+ 
+   // std::map used below to ensure sorted order.
+-  std::map<std::string, std::vector<uint16_t>> domain_map_;
+-  std::map<std::string, std::vector<uint16_t>> exclusion_map_;
+-  std::map<std::string, std::vector<uint16_t>> class_map_;
+-  std::map<std::string, std::vector<uint16_t>> id_map_;
++  std::map<std::string, std::vector<uint32_t>> domain_map_;
++  std::map<std::string, std::vector<uint32_t>> exclusion_map_;
++  std::map<std::string, std::vector<uint32_t>> class_map_;
++  std::map<std::string, std::vector<uint32_t>> id_map_;
+ 
+-  std::map<std::string, uint16_t> selector_to_index_;
++  std::map<std::string, uint32_t> selector_to_index_;
+ 
+   raw_ptr<flatbuffers::FlatBufferBuilder> builder_;
+ };
+diff --git a/components/subresource_filter/core/common/style_rule_matcher.cc b/components/subresource_filter/core/common/style_rule_matcher.cc
+index 3cb75137d5..90baeb414e 100644
+--- a/components/subresource_filter/core/common/style_rule_matcher.cc
++++ b/components/subresource_filter/core/common/style_rule_matcher.cc
+@@ -48,14 +48,14 @@ void GetSelectorsForName(const flatbuffers::Vector<
+                              flatbuffers::Offset<flat::NameToSelectors>>* rules,
+                          const flat::StyleRuleIndex* index,
+                          std::string_view name,
+-                         const base::flat_set<uint16_t>& excluded_indices,
++                         const base::flat_set<uint32_t>& excluded_indices,
+                          std::vector<std::string_view>& out_selectors) {
+   const flat::NameToSelectors* entry = FindEntry(rules, name);
+   if (!entry) {
+     return;
+   }
+ 
+-  auto add_explicit_rule = [&](uint16_t rule_index) {
++  auto add_explicit_rule = [&](uint32_t rule_index) {
+     if (!excluded_indices.contains(rule_index)) {
+       out_selectors.emplace_back(
+           index->selectors()->Get(rule_index)->string_view());
+@@ -64,7 +64,7 @@ void GetSelectorsForName(const flatbuffers::Vector<
+ 
+   out_selectors.reserve(
+       1 + (entry->more_indices() ? entry->more_indices()->size() : 0));
+-  uint16_t rule_index = entry->first_index();
++  uint32_t rule_index = entry->first_index();
+ 
+   if (rule_index == StyleRuleIndexer::kImplicitStyleRuleIndex) {
+     // Implicit rules are only supported for class and ID maps, where the
+@@ -76,7 +76,7 @@ void GetSelectorsForName(const flatbuffers::Vector<
+   }
+ 
+   if (entry->more_indices()) {
+-    for (uint16_t more_rule_index : *entry->more_indices()) {
++    for (uint32_t more_rule_index : *entry->more_indices()) {
+       add_explicit_rule(more_rule_index);
+     }
+   }
+@@ -182,7 +182,7 @@ void StyleRuleMatcher::GetSelectorsById(
+                      id_name, hash, out_selectors);
+ }
+ 
+-const base::flat_set<uint16_t>& StyleRuleMatcher::GetExcludedIndices(
++const base::flat_set<uint32_t>& StyleRuleMatcher::GetExcludedIndices(
+     const url::Origin& origin) const {
+   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+   if (cached_origin_ && *cached_origin_ == origin) {
+@@ -190,7 +190,7 @@ const base::flat_set<uint16_t>& StyleRuleMatcher::GetExcludedIndices(
+   }
+ 
+   cached_origin_ = origin;
+-  cached_excluded_indices_ = base::flat_set<uint16_t>();
++  cached_excluded_indices_ = base::flat_set<uint32_t>();
+ 
+   if (!index_ || !index_->exclusion_map()) {
+     return *cached_excluded_indices_;
+@@ -202,7 +202,7 @@ const base::flat_set<uint16_t>& StyleRuleMatcher::GetExcludedIndices(
+   std::string_view host = origin.GetTupleOrPrecursorTupleIfOpaque().host();
+ 
+   const auto* exclusions = index_->exclusion_map();
+-  std::vector<uint16_t> excluded_vector;
++  std::vector<uint32_t> excluded_vector;
+ 
+   // Find excluded selectors for this host, as well as the parent domain suffix.
+   ForEachParentDomain(host, [&](std::string_view sub_host) {
+@@ -212,14 +212,14 @@ const base::flat_set<uint16_t>& StyleRuleMatcher::GetExcludedIndices(
+         excluded_vector.emplace_back(entry->first_index());
+       }
+       if (entry->more_indices()) {
+-        for (uint16_t more_rule_index : *entry->more_indices()) {
++        for (uint32_t more_rule_index : *entry->more_indices()) {
+           excluded_vector.emplace_back(more_rule_index);
+         }
+       }
+     }
+   });
+   *cached_excluded_indices_ =
+-      base::flat_set<uint16_t>(std::move(excluded_vector));
++      base::flat_set<uint32_t>(std::move(excluded_vector));
+   return *cached_excluded_indices_;
+ }
+ 
+diff --git a/components/subresource_filter/core/common/style_rule_matcher.h b/components/subresource_filter/core/common/style_rule_matcher.h
+index 7f521ab61a..a7cb1de261 100644
+--- a/components/subresource_filter/core/common/style_rule_matcher.h
++++ b/components/subresource_filter/core/common/style_rule_matcher.h
+@@ -57,7 +57,7 @@ class StyleRuleMatcher {
+                         std::vector<std::string_view>& out_selectors) const;
+ 
+  private:
+-  const base::flat_set<uint16_t>& GetExcludedIndices(
++  const base::flat_set<uint32_t>& GetExcludedIndices(
+       const url::Origin& document_origin) const;
+ 
+   bool CheckBloomBits(uint32_t hash) const;
+@@ -78,7 +78,7 @@ class StyleRuleMatcher {
+ 
+   // The following fields are used to cache the excluded indices for the last
+   // queried origin. They are mutable to allow caching in const methods.
+-  mutable std::optional<base::flat_set<uint16_t>> cached_excluded_indices_;
++  mutable std::optional<base::flat_set<uint32_t>> cached_excluded_indices_;
+   mutable std::optional<url::Origin> cached_origin_;
+ 
+   SEQUENCE_CHECKER(sequence_checker_);

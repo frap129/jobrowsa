@@ -1,0 +1,98 @@
+Copyright 2024-2026 The Trivalent Authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is
+distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and limitations under the License.
+---
+diff --git a/net/base/features.cc b/net/base/features.cc
+--- a/net/base/features.cc
++++ b/net/base/features.cc
+@@ -29,6 +29,12 @@
+ 
+ namespace net::features {
+ 
++BASE_FEATURE(kDisableCrossOriginReferrers,
++             base::FEATURE_DISABLED_BY_DEFAULT);
++
++BASE_FEATURE(kCapReferrerToOriginOnCrossOrigin,
++             base::FEATURE_ENABLED_BY_DEFAULT);
++
+ BASE_FEATURE(kHeliumSplitClientHello, base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+ BASE_FEATURE(kSetIpv6ProbeFalse, "SetIpv6ProbeFalse", base::FEATURE_DISABLED_BY_DEFAULT);
+diff --git a/net/base/features.h b/net/base/features.h
+--- a/net/base/features.h
++++ b/net/base/features.h
+@@ -22,6 +22,13 @@
+ 
+ namespace net::features {
+ 
++// Disables referrers when navigating across origins.
++NET_EXPORT BASE_DECLARE_FEATURE(kDisableCrossOriginReferrers);
++
++// When kCapReferrerToOriginOnCrossOrigin is enabled, HTTP referrers on cross-
++// origin requests are restricted to contain at most the source origin.
++NET_EXPORT BASE_DECLARE_FEATURE(kCapReferrerToOriginOnCrossOrigin);
++
+ // Splits outgoing TLS ClientHello messages across TLS records.
+ NET_EXPORT BASE_DECLARE_FEATURE(kHeliumSplitClientHello);
+ 
+diff --git a/net/url_request/url_request_job.cc b/net/url_request/url_request_job.cc
+index b014aa95ff..1eb6abb535 100644
+--- a/net/url_request/url_request_job.cc
++++ b/net/url_request/url_request_job.cc
+@@ -344,6 +344,20 @@ GURL URLRequestJob::ComputeReferrerForPolicy(
+       original_referrer.SchemeIsCryptographic() &&
+       !destination.SchemeIsCryptographic();
+
++  if (base::FeatureList::IsEnabled(
++          features::kDisableCrossOriginReferrers) &&
++      !same_origin) {
++    // Return an empty URL if cross-origin and the feature is enabled.
++    //
++    // Returns here since the referrer policy doesn't matter if it is
++    // cross-origin (if it is same origin then this will never happen)
++    return GURL();
++  } else if (base::FeatureList::IsEnabled(
++                 features::kCapReferrerToOriginOnCrossOrigin) &&
++             !same_origin) {
++    should_strip_to_origin = true;
++  }
++
+   switch (policy) {
+     case ReferrerPolicy::CLEAR_ON_TRANSITION_FROM_SECURE_TO_INSECURE:
+       if (secure_referrer_but_insecure_destination)
+diff --git a/services/network/network_service_network_delegate.cc b/services/network/network_service_network_delegate.cc
+--- a/services/network/network_service_network_delegate.cc
++++ b/services/network/network_service_network_delegate.cc
+@@ -36,6 +36,7 @@
+ #include "services/network/url_loader.h"
+ #include "services/network/url_loader_util.h"
+ #include "url/gurl.h"
++#include "url/origin.h"
+ 
+ #if BUILDFLAG(ENABLE_WEBSOCKETS)
+ #include "services/network/websocket.h"
+@@ -81,6 +82,16 @@
+     request->set_referrer_policy(std::move(sanitized_referrer.second));
+     return;
+   }
++  if (!url::IsSameOriginWith(effective_url, GURL(request->referrer()))) {
++    if (base::FeatureList::IsEnabled(
++          net::features::kDisableCrossOriginReferrers)) {
++      request->SetReferrer(std::string());
++    } else if (base::FeatureList::IsEnabled(
++                net::features::kCapReferrerToOriginOnCrossOrigin)) {
++      auto capped_referrer = url::Origin::Create(GURL(request->referrer()));
++      request->SetReferrer(capped_referrer.GetURL().spec());
++    }
++  }
+ }
+ 
+ int NetworkServiceNetworkDelegate::OnBeforeURLRequest(

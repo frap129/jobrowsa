@@ -1,0 +1,132 @@
+Copyright 2026 The Trivalent Authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is
+distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and limitations under the License.
+---
+diff --git a/chrome/browser/resources/settings/privacy_page/security/security_page.html b/chrome/browser/resources/settings/privacy_page/security/security_page.html
+--- a/chrome/browser/resources/settings/privacy_page/security/security_page.html
++++ b/chrome/browser/resources/settings/privacy_page/security/security_page.html
+@@ -80,7 +80,7 @@
+       pointer-events: auto;
+     }
+   </style>
+-  <settings-subpage page-title="$i18n{securityPageTitle}"
++  <settings-subpage page-title="$i18n{privacyPageTitle}"
+       learn-more-url="$i18n{safeBrowsingHelpCenterURL}"
+       route-path$="[[routePath]]">
+     <div class="cr-row first">
+@@ -188,4 +188,46 @@
+         on-click="onManageCertificatesClick_" external>
+     </cr-link-row>
+ 
++    <div id="hardeningSection">
++      <div class="cr-row first"><h2 class="cr-title-text">Hardening</h2></div>
++      <settings-toggle-button class="cr-row first"
++        pref="{{prefs.incognito.launch_mode}}"
++        label="$i18n{incognitoLaunchLabel}"
++        sub-label="$i18n{incognitoLaunchDesc}">
++      </settings-toggle-button>
++      <template is="dom-if" if="[[prefs.incognito.launch_mode.value]]">
++        <settings-toggle-button class="cr-row first"
++          pref="{{prefs.incognito.startup_mode}}"
++          label="$i18n{incognitoStartupLabel}"
++          sub-label="$i18n{incognitoStartupDesc}">
++        </settings-toggle-button>
++      </template>
++      <settings-toggle-button class="cr-row"
++        pref="{{prefs.disable_3d_apis}}"
++        label="$i18n{disable3dApisLabel}"
++        sub-label="$i18n{disable3dApisDesc}">
++      </settings-toggle-button>
++      <div class="cr-row">
++        <div id="webrtcLabel" class="flex cr-padded-text" aria-hidden="true">
++          $i18n{webrtcHandlingPolicyLabel}
++        </div>
++        <settings-dropdown-menu
++          label="$i18n{webrtcHandlingPolicyLabel}"
++          pref-key="webrtc.ip_handling_policy"
++          menu-options="[[webrtcHandlingPolicyOptions_]]">
++        </settings-dropdown-menu>
++      </div>
++<if expr="is_linux or is_win">
++      <settings-toggle-button class="cr-row"
++        pref="{{prefs.net.network_service_sandbox}}"
++        label="$i18n{netServSandboxLabel}"
++        sub-label="$i18n{netServSandboxDesc}">
++      </settings-toggle-button>
++</if>
++      <settings-toggle-button class="cr-row"
++        pref="{{prefs.extensions.disabled}}"
++        label="$i18n{disableExtensionsLabel}"
++        sub-label="$i18n{disableExtensionsDesc}">
++      </settings-toggle-button>
++    </div>
+   </settings-subpage>
+diff --git a/chrome/browser/resources/settings/privacy_page/security/security_page.ts b/chrome/browser/resources/settings/privacy_page/security/security_page.ts
+--- a/chrome/browser/resources/settings/privacy_page/security/security_page.ts
++++ b/chrome/browser/resources/settings/privacy_page/security/security_page.ts
+@@ -18,6 +18,7 @@
+ import '../../simple_confirmation_dialog.js';
+ import '../do_not_track_toggle.js';
+ import './secure_dns.js';
++import '../../controls/settings_dropdown_menu.js';
+ 
+ import {PrefsMixin} from '/shared/settings/prefs/prefs_mixin.js';
+ import {CrSettingsPrefs} from '/shared/settings/prefs/prefs_types.js';
+@@ -33,6 +34,7 @@
+ import type {SettingsCollapseRadioButtonElement} from '../../controls/collapse_radio_button.js';
+ import type {SettingsRadioGroupElement} from '../../controls/settings_radio_group.js';
+ import type {SettingsToggleButtonElement} from '../../controls/settings_toggle_button.js';
++import type {DropdownMenuOptionList} from '../../controls/settings_dropdown_menu.js';
+ import {loadTimeData} from '../../i18n_setup.js';
+ import type {MetricsBrowserProxy} from '../../metrics_browser_proxy.js';
+ import {MetricsBrowserProxyImpl, PrivacyElementInteractions, SafeBrowsingInteractions} from '../../metrics_browser_proxy.js';
+@@ -127,6 +129,19 @@
+       },
+       // </if>
+ 
++      webrtcHandlingPolicyOptions_: {
++        readOnly: true,
++        type: Array,
++        value() {
++          return [
++            {value: "default", name: "Default"},
++            {value: "default_public_and_private_interfaces", name: "Default Public and Private Interfaces"},
++            {value: "default_public_interface_only", name: "Default Public Interface Only"},
++            {value: "disable_non_proxied_udp", name: "Disable Non-Proxied UDP"},
++          ];
++        },
++      },
++
+       /**
+        * Valid safe browsing states.
+        */
+@@ -218,6 +233,7 @@
+       },
+     };
+   }
++  declare private webrtcHandlingPolicyOptions_: DropdownMenuOptionList;
+   declare private showSecureDnsSetting_: boolean;
+ 
+   // <if expr="is_chromeos">
+diff --git a/components/security_interstitials/core/browser/resources/interstitial_large.js b/components/security_interstitials/core/browser/resources/interstitial_large.js
+index 5f4217446a..8dc0759c9b 100644
+--- a/components/security_interstitials/core/browser/resources/interstitial_large.js
++++ b/components/security_interstitials/core/browser/resources/interstitial_large.js
+@@ -335,8 +335,6 @@ function setupEvents() {
+   }
+ 
+   preventDefaultOnPoundLinkClicks();
+-  setupExtendedReportingCheckbox();
+-  setupEnhancedProtectionMessage();
+   setupSSLDebuggingInfo();
+ 
+   const disableKeyboardOverride =
+ 

@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: quh4gko8 <88831734+quh4gko8@users.noreply.github.com>
+Date: Mon, 25 Sep 2023 09:26:57 +0000
+Subject: [PATCH] Disable newer privacy sandbox features by default
+
+---
+diff --git a/components/privacy_sandbox/privacy_sandbox_features.cc b/components/privacy_sandbox/privacy_sandbox_features.cc
+index 20376547798b..2f5d3f60b0f0 100644
+--- a/components/privacy_sandbox/privacy_sandbox_features.cc
++++ b/components/privacy_sandbox/privacy_sandbox_features.cc
+@@ -8,7 +8,7 @@
+ 
+ namespace privacy_sandbox {
+ 
+-BASE_FEATURE(kPrivacySandboxSettings4, base::FEATURE_ENABLED_BY_DEFAULT);
++BASE_FEATURE(kPrivacySandboxSettings4, base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+ const char kPrivacySandboxSettings4ConsentRequiredName[] = "consent-required";
+ const char kPrivacySandboxSettings4NoticeRequiredName[] = "notice-required";
+diff --git a/third_party/blink/common/features.cc b/third_party/blink/common/features.cc
+index 5a9d145b54db..3020b8cf8232 100644
+--- a/third_party/blink/common/features.cc
++++ b/third_party/blink/common/features.cc
+@@ -277,11 +277,11 @@
+ // feature has to be enabled first (i.e. `kBrowsingTopics` is enabled, and,
+ // either a valid Origin Trial token exists or `kPrivacySandboxAdsAPIsOverride`
+ // is enabled.)
+-BASE_FEATURE(kBrowsingTopicsDocumentAPI, base::FEATURE_ENABLED_BY_DEFAULT);
++BASE_FEATURE(kBrowsingTopicsDocumentAPI, base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+ // Decoupled with the main `kBrowsingTopics` feature, so it allows us to
+ // decouple the server side configs.
+-BASE_FEATURE(kBrowsingTopicsParameters, base::FEATURE_ENABLED_BY_DEFAULT);
++BASE_FEATURE(kBrowsingTopicsParameters, base::FEATURE_DISABLED_BY_DEFAULT);
+ // The periodic topics calculation interval.
+ BASE_FEATURE_PARAM(base::TimeDelta,
+                    kBrowsingTopicsTimePeriodPerEpoch,

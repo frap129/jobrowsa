@@ -1,0 +1,41 @@
+Copyright 2024-2026 The Trivalent Authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is
+distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and limitations under the License.
+---
+diff --git a/remoting/host/policy_watcher.cc b/remoting/host/policy_watcher.cc
+index 5cd10cf15d..06762a3562 100644
+--- a/remoting/host/policy_watcher.cc
++++ b/remoting/host/policy_watcher.cc
+@@ -170,13 +170,13 @@ base::DictValue PolicyWatcher::GetPlatformPolicies() {
+
+ base::DictValue PolicyWatcher::GetDefaultPolicies() {
+   base::DictValue result;
+-  result.Set(key::kRemoteAccessHostFirewallTraversal, true);
++  result.Set(key::kRemoteAccessHostFirewallTraversal, false);
+   result.Set(key::kRemoteAccessHostClientDomainList, base::ListValue());
+   result.Set(key::kRemoteAccessHostDomainList, base::ListValue());
+   result.Set(key::kRemoteAccessHostAllowRelayedConnection, true);
+   result.Set(key::kRemoteAccessHostUdpPortRange, "");
+   result.Set(key::kRemoteAccessHostClipboardSizeBytes, -1);
+-  result.Set(key::kRemoteAccessHostAllowRemoteSupportConnections, true);
++  result.Set(key::kRemoteAccessHostAllowRemoteSupportConnections, false);
+ #if BUILDFLAG(IS_CHROMEOS)
+   result.Set(key::kRemoteAccessHostAllowEnterpriseRemoteSupportConnections,
+              true);
+@@ -193,7 +193,7 @@ base::DictValue PolicyWatcher::GetDefaultPolicies() {
+   result.Set(key::kRemoteAccessHostAllowFileTransfer, true);
+   result.Set(key::kRemoteAccessHostAllowUrlForwarding, true);
+   result.Set(key::kRemoteAccessHostEnableUserInterface, true);
+-  result.Set(key::kRemoteAccessHostAllowRemoteAccessConnections, true);
++  result.Set(key::kRemoteAccessHostAllowRemoteAccessConnections, false);
+   result.Set(key::kRemoteAccessHostMaximumSessionDurationMinutes, 0);
+   result.Set(key::kRemoteAccessHostAllowPinAuthentication, base::Value());
+ #endif

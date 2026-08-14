@@ -1,0 +1,63 @@
+Copyright 2024-2025 The Trivalent Authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is
+distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and limitations under the License.
+---
+diff --git a/components/url_formatter/url_formatter.cc b/components/url_formatter/url_formatter.cc
+index 63b6e1583a837..a0b8b8c588161 100644
+--- a/components/url_formatter/url_formatter.cc
++++ b/components/url_formatter/url_formatter.cc
+@@ -26,6 +26,7 @@
+ #include "url/third_party/mozilla/url_parse.h"
+ #include "url/url_constants.h"
+ #include "url/url_util.h"
++#include "url/url_features.h"
+ 
+ namespace url_formatter {
+ 
+@@ -318,6 +319,10 @@ IDNConversionResult IDNToUnicodeWithAdjustmentsImpl(
+   GetTopLevelDomain(host, &top_level_domain, &top_level_domain_unicode);
+ 
+   IDNConversionResult result;
++  if (base::FeatureList::IsEnabled(url::kShowPunycodeDomains)) {
++    result.result = host16;
++    return result;
++  }
+   // Do each component of the host separately, since we enforce script matching
+   // on a per-component basis.
+   std::u16string out16;
+diff --git a/url/url_features.cc b/url/url_features.cc
+index 55cdc8b1ee..718c387490 100644
+--- a/url/url_features.cc
++++ b/url/url_features.cc
+@@ -7,6 +7,8 @@
+
+ namespace url {
+
++BASE_FEATURE(kShowPunycodeDomains, base::FEATURE_DISABLED_BY_DEFAULT);
++
+ BASE_FEATURE(kDisallowSpaceCharacterInURLHostParsing,
+              base::FEATURE_DISABLED_BY_DEFAULT);
+
+diff --git a/url/url_features.h b/url/url_features.h
+index 61a665aa0a..586462e007 100644
+--- a/url/url_features.h
++++ b/url/url_features.h
+@@ -10,6 +10,10 @@
+ 
+ namespace url {
+ 
++// Forces IDN domains to be shown as punycode, this helps mitigate IDN homograph
++// attacks which can be used for phishing
++BASE_DECLARE_FEATURE(kShowPunycodeDomains);
++
+ // If you add or remove a feature related to URLs, you may need to
+ // correspondingly update the EarlyAccess allow list in app shims/
+ // (chrome/app_shim/app_shim_controller.mm). See https://crbug.com/1520386 for

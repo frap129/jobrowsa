@@ -1,0 +1,290 @@
+Copyright 2026 The Trivalent Authors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is
+distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and limitations under the License.
+---
+iff --git a/chrome/app/chromium_strings.grd b/chrome/app/chromium_strings.grd
+index 384521cdbe..8229efaeb6 100644
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -3295,6 +3295,10 @@ Chromium is unable to recover your settings.
+       <message name="IDS_JS_OPTIMIZATION_BUBBLE_BODY_NON_POLICY_BODY" desc="Body text for the JavaScript optimization bubble when disabled for other reasons.">
+         For security, Chromium turns off JavaScript optimization when you visit a site for the first time.&#xA;
+ If this page isn’t working as expected, try allowing optimization.
++      </message>
++      <message name="IDS_JS_JIT_BUBBLE_BODY_NON_POLICY_BODY" desc="Body text for the JavaScript optimization bubble when disabled for other reasons.">
++        For security, Chromium turns off JavaScript JIT by default.&#xA;.&#xA;
++If this page isn’t working as expected, try allowing JIT.
+       </message>
+       <!-- Send Tab To Self -->
+       <message name="IDS_SEND_TAB_TO_SELF_SIGN_IN_PROMO_TITLE" desc="Title of the send-tab-to-self sign-in promo bubble.">
+diff --git a/chrome/app/generated_resources.grd b/chrome/app/generated_resources.grd
+index b3263e1207..ac23e9bf9d 100644
+--- a/chrome/app/generated_resources.grd
++++ b/chrome/app/generated_resources.grd
+@@ -4217,6 +4217,15 @@ are declared in tools/grit/grit_args.gni.
+       <message name="IDS_JS_OPTIMIZATION_BUBBLE_POLICY_BODY" desc="Body text for the JavaScript optimization bubble when disabled by enterprise policy.">
+         JavaScript optimization is off for this site.
+       </message>
++      <message name="IDS_JS_JIT_DISABLED_ICON_TOOLTIP" desc="Tooltip for the JS Optimizations chip in the toolbar when it's disabled.">
++        JavaScript JIT is disabled.
++      </message>
++      <message name="IDS_JS_JIT_BUBBLE_TITLE" desc="Title for the JavaScript optimization disabled bubble.">
++        JavaScript JIT is off
++      </message>
++      <message name="IDS_JS_JIT_BUBBLE_POLICY_BODY" desc="Body text for the JavaScript optimization bubble when disabled by enterprise policy.">
++        JavaScript JIT is off for this site.
++      </message>
+      <if expr="not use_titlecase">
+       <message name="IDS_JS_OPTIMIZATION_BUBBLE_ENABLE_BUTTON" desc="Button text to enable JavaScript optimization for the current site.">
+         Allow for this site
+diff --git a/components/site_settings_strings.grdp b/components/site_settings_strings.grdp
+index dbf4e88dbd..1e1746315b 100644
+--- a/components/site_settings_strings.grdp
++++ b/components/site_settings_strings.grdp
+@@ -124,6 +124,9 @@
+   <message name="IDS_SITE_SETTINGS_TYPE_JAVASCRIPT_OPTIMIZER" desc="The label for the JavaScript optimizer site settings controls.">
+     JavaScript optimization &amp; security
+   </message>
++  <message name="IDS_SITE_SETTINGS_TYPE_JAVASCRIPT_JIT" desc="Trivalent string.">
++    JavaScript JIT
++  </message>
+   <message name="IDS_SITE_SETTINGS_TYPE_LOCATION" desc="The label used for geolocation site settings controls." meaning="Geolocation">
+     Location
+   </message>
+diff --git a/chrome/app/settings_strings.grdp b/chrome/app/settings_strings.grdp
+index aae688f787..1ab79f7b31 100644
+--- a/chrome/app/settings_strings.grdp
++++ b/chrome/app/settings_strings.grdp
+@@ -1335,6 +1335,52 @@
+       Browsing and searching is faster than standard preloading
+     </message>
+ 
++    <!-- Trivalent -->
++    <message name="IDS_WEBSITE_DARK_MODE" desc="Trivalent String.">
++      Website dark mode
++    </message>
++    <message name="IDS_PRINTING_CAPABILITIES" desc="Trivalent String.">
++      Printing capabilities
++    </message>
++
++    <!-- Trivalent security section -->
++    <message name="IDS_HARDENING_TITLE" desc="Trivalent String.">
++      Hardening
++    </message>
++    <message name="IDS_INCOGNITO_LAUNCH_LABEL" desc="Trivalent String.">
++      Incognito Launch
++    </message>
++    <message name="IDS_INCOGNITO_LAUNCH_DESCRIPTION" desc="Trivalent String.">
++      Open external links in Incognito tabs
++    </message>
++    <message name="IDS_INCOGNITO_STARTUP_LABEL" desc="Trivalent String.">
++      Incognito Startup
++    </message>
++    <message name="IDS_INCOGNITO_STARTUP_DESCRIPTION" desc="Trivalent String.">
++      Opens new sessions in Incognito tabs
++    </message>
++    <message name="IDS_DISABLE_3D_APIS_LABEL" desc="Trivalent String.">
++      Block 3D APIs
++    </message>
++    <message name="IDS_DISABLE_3D_APIS_DESCRIPTION" desc="Trivalent String.">
++      Block web-facing access to features like WebGL
++    </message>
++    <message name="IDS_WEBRTC_HANDLING_POLICY_LABEL" desc="Trivalent String.">
++      WebRTC Handling Policy
++    </message>
++    <message name="IDS_NETWORK_SERVICE_SANDBOX_LABEL" desc="Trivalent String.">
++      Network Service Sandbox
++    </message>
++    <message name="IDS_NETWORK_SERVICE_SANDBOX_DESCRIPTION" desc="Trivalent String.">
++      Disabling may fix issues with data persistence but will reduce security slightly, requires a restart to apply
++    </message>
++    <message name="IDS_DISABLE_EXTENSIONS_LABEL" desc="Trivalent String.">
++     Block Extensions
++    </message>
++    <message name="IDS_DISABLE_EXTENSIONS_DESCRIPTION" desc="Trivalent String.">
++      Changes to this setting requires a restart to apply
++    </message>
++
+     <!-- Privacy Page -->
+     <message name="IDS_SETTINGS_PRIVACY" desc="Name of the settings page which allows users to modify privacy and security settings.">
+       Privacy and security
+@@ -2205,6 +2251,9 @@
+     <message name="IDS_SETTINGS_SECURITY_JAVASCRIPT_OPTIMIZATION_LINK_TITLE" desc="Title for the link row to the V8 security settings.">
+       Manage JavaScript optimization &amp; security
+     </message>
++    <message name="IDS_SETTINGS_SECURITY_JAVASCRIPT_JIT_LINK_TITLE" desc="Title for the link row to the V8 security settings.">
++      Manage JavaScript JIT
++    </message>
+     <message name="IDS_SETTINGS_CONTENT_SETTINGS" desc="Text of the button that takes a user to settings page thats allows users to modify site settings. Also the title of that settings page.">
+       Content settings
+     </message>
+@@ -2886,6 +2935,12 @@
+     <message name="IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_OPTIMIZER_BLOCKED" desc="Label for the disabled option of the JavaScript optimizer content setting.">
+       Don’t allow sites to use JavaScript optimization
+     </message>
++    <message name="IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_JIT_ALLOWED" desc="Label for the enabled option of the JavaScript optimizer content setting.">
++      Sites can use JavaScript JIT
++    </message>
++    <message name="IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_JIT_BLOCKED" desc="Label for the disabled option of the JavaScript optimizer content setting.">
++      Don’t allow sites to use JavaScript JIT
++    </message>
+     <message name="IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_OPTIMIZER_BLOCKED_UNFAMILIAR_SITES" desc="Label for option where JavaScript optimizer is disabled for sites which are unfamiliar to the user. Familiarity is determined using a heuristic based on the user's Chrome history.">
+       Automatically disable JavaScript optimizers on unfamiliar sites
+     </message>
+@@ -2901,6 +2956,12 @@
+     <message name="IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_OPTIMIZER_BLOCKED_EXCEPTIONS" desc="Label for the blocked exceptions site list of the JavaScript optimizer content setting.">
+       Not allowed to use JavaScript optimization
+     </message>
++    <message name="IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_JIT_ALLOWED_EXCEPTIONS" desc="Label for the allowed exceptions site list of the JavaScript optimizer content setting.">
++      Always allowed to use JavaScript JIT
++    </message>
++    <message name="IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_JIT_BLOCKED_EXCEPTIONS" desc="Label for the blocked exceptions site list of the JavaScript optimizer content setting.">
++      Not allowed to use JavaScript JIT
++    </message>
+     <message name="IDS_SETTINGS_SITE_SETTINGS_KEYBOARD_LOCK_DESCRIPTION" desc="Description of the keyboard lock content setting.">
+       Sites use this feature to override the input of your keyboard, like for games or remote desktop apps
+     </message>
+diff --git a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+--- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
++++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
+@@ -555,6 +555,7 @@
+ void AddAppearanceStrings(content::WebUIDataSource* html_source,
+                           Profile* profile) {
+   static constexpr webui::LocalizedString kLocalizedStrings[] = {
++      {"websiteDarkMode", IDS_WEBSITE_DARK_MODE},
+       {"appearancePageTitle", IDS_SETTINGS_APPEARANCE},
+       {"appearanceBehaviorPageTitle", IDS_SETTINGS_APPEARANCE_AND_BEHAVIOR},
+       {"behaviorPageTitle", IDS_SETTINGS_BEHAVIOR},
+@@ -2407,6 +2408,18 @@
+ void AddPrivacyStrings(content::WebUIDataSource* html_source,
+                        Profile* profile) {
+   static constexpr webui::LocalizedString kLocalizedStrings[] = {
++      {"hardeningSectionTitle", IDS_HARDENING_TITLE},
++      {"incognitoLaunchLabel", IDS_INCOGNITO_LAUNCH_LABEL},
++      {"incognitoLaunchDesc", IDS_INCOGNITO_LAUNCH_DESCRIPTION},
++      {"incognitoStartupLabel", IDS_INCOGNITO_STARTUP_LABEL},
++      {"incognitoStartupDesc", IDS_INCOGNITO_STARTUP_DESCRIPTION},
++      {"disable3dApisLabel", IDS_DISABLE_3D_APIS_LABEL},
++      {"disable3dApisDesc", IDS_DISABLE_3D_APIS_DESCRIPTION},
++      {"webrtcHandlingPolicyLabel", IDS_WEBRTC_HANDLING_POLICY_LABEL},
++      {"netServSandboxLabel", IDS_NETWORK_SERVICE_SANDBOX_LABEL},
++      {"netServSandboxDesc", IDS_NETWORK_SERVICE_SANDBOX_DESCRIPTION},
++      {"disableExtensionsLabel", IDS_DISABLE_EXTENSIONS_LABEL},
++      {"disableExtensionsDesc", IDS_DISABLE_EXTENSIONS_DESCRIPTION},
+       {"newBadgeLabel", IDS_NEW_BADGE},
+       {"privacyPageTitle", IDS_SETTINGS_PRIVACY},
+       {"privacyPageMore", IDS_SETTINGS_PRIVACY_MORE},
+@@ -2646,7 +2659,7 @@
+       {"preloadingPageThingsToConsiderBulletOne",
+        IDS_SETTINGS_PRELOAD_PAGES_THINGS_TO_CONSIDER_BULLET_ONE},
+       {"securityJavascriptOptimizerLinkTitle",
+-       IDS_SETTINGS_SECURITY_JAVASCRIPT_OPTIMIZATION_LINK_TITLE},
++       IDS_SETTINGS_SECURITY_JAVASCRIPT_JIT_LINK_TITLE},
+       {"securityJavascriptOptimizerLinkRowLabelEnabled",
+        IDS_SETTINGS_SECURITY_JAVASCRIPT_OPTIMIZATION_LINK_ROW_ENABLED},
+       {"securityJavascriptOptimizerLinkRowLabelDisabled",
+@@ -3270,7 +3283,7 @@
+       {"siteSettingsCategoryLocation", IDS_SITE_SETTINGS_TYPE_LOCATION},
+       {"siteSettingsCategoryJavascript", IDS_SITE_SETTINGS_TYPE_JAVASCRIPT},
+       {"siteSettingsCategoryJavascriptOptimizer",
+-       IDS_SITE_SETTINGS_TYPE_JAVASCRIPT_OPTIMIZER},
++       IDS_SITE_SETTINGS_TYPE_JAVASCRIPT_JIT},
+       {"siteSettingsCategoryMicrophone", IDS_SITE_SETTINGS_TYPE_MIC},
+       {"siteSettingsMicrophoneLabel", IDS_SITE_SETTINGS_TYPE_MIC},
+       {"siteSettingsCategoryNotifications",
+@@ -3359,9 +3372,9 @@
+       {"siteSettingsJavascriptMidSentence",
+        IDS_SITE_SETTINGS_TYPE_JAVASCRIPT_MID_SENTENCE},
+       {"siteSettingsJavascriptOptimizer",
+-       IDS_SITE_SETTINGS_TYPE_JAVASCRIPT_OPTIMIZER},
++       IDS_SITE_SETTINGS_TYPE_JAVASCRIPT_JIT},
+       {"siteSettingsJavascriptOptimizerMidsentence",
+-       IDS_SITE_SETTINGS_TYPE_JAVASCRIPT_OPTIMIZER},  // Deliberately the same
++       IDS_SITE_SETTINGS_TYPE_JAVASCRIPT_JIT},  // Deliberately the same
+                                                       // form.
+       {"siteSettingsSound", IDS_SITE_SETTINGS_TYPE_SOUND},
+       {"siteSettingsSoundMidSentence",
+@@ -3800,11 +3813,11 @@
+       {"siteSettingsJavascriptOptimizerDescription",
+        IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_OPTIMIZER_DESCRIPTION},
+       {"siteSettingsJavascriptOptimizerAllowed",
+-       IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_OPTIMIZER_ALLOWED},
++       IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_JIT_ALLOWED},
+       {"siteSettingsJavascriptOptimizerAllowedSubLabel",
+        IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_OPTIMIZER_ALLOWED_SUB_LABEL},
+       {"siteSettingsJavascriptOptimizerBlocked",
+-       IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_OPTIMIZER_BLOCKED},
++       IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_JIT_BLOCKED},
+       {"siteSettingsJavascriptOptimizerBlockedUnfamiliarSites",
+        IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_OPTIMIZER_BLOCKED_UNFAMILIAR_SITES},
+       {"siteSettingsJavascriptOptimizerBlockedUnfamiliarSitesSubLabel",
+@@ -3815,9 +3828,9 @@
+       {"siteSettingsJavascriptOptimizerBlockedSubLabel",
+        IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_OPTIMIZER_BLOCKED_SUB_LABEL},
+       {"siteSettingsJavascriptOptimizerAllowedExceptions",
+-       IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_OPTIMIZER_ALLOWED_EXCEPTIONS},
++       IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_JIT_ALLOWED_EXCEPTIONS},
+       {"siteSettingsJavascriptOptimizerBlockedExceptions",
+-       IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_OPTIMIZER_BLOCKED_EXCEPTIONS},
++       IDS_SETTINGS_SITE_SETTINGS_JAVASCRIPT_JIT_BLOCKED_EXCEPTIONS},
+       {"siteSettingsKeyboardLock", IDS_SITE_SETTINGS_TYPE_KEYBOARD_LOCK},
+       {"siteSettingsKeyboardLockAsk",
+        IDS_SETTINGS_SITE_SETTINGS_KEYBOARD_LOCK_ASK},
+@@ -4277,6 +4290,7 @@
+ #if !BUILDFLAG(IS_CHROMEOS)
+ void AddSystemStrings(content::WebUIDataSource* html_source) {
+   static constexpr webui::LocalizedString kLocalizedStrings[] = {
++      {"printingCapabilities", IDS_PRINTING_CAPABILITIES},
+       {"systemPageTitle", IDS_SETTINGS_SYSTEM},
+ #if !BUILDFLAG(IS_MAC)
+       {"backgroundAppsLabel", IDS_SETTINGS_SYSTEM_BACKGROUND_APPS_LABEL},
+diff --git a/chrome/browser/ui/browser_actions.cc b/chrome/browser/ui/browser_actions.cc
+index f9503246a2..1239504bac 100644
+--- a/chrome/browser/ui/browser_actions.cc
++++ b/chrome/browser/ui/browser_actions.cc
+@@ -612,7 +612,7 @@ void BrowserActions::InitializePageActionIconActions() {
+               bwi))
+           .SetActionId(kActionShowJsOptimizationsIcon)
+           .SetTooltipText(l10n_util::GetStringUTF16(
+-              IDS_JS_OPTIMIZATIONS_DISABLED_ICON_TOOLTIP))
++              IDS_JS_JIT_DISABLED_ICON_TOOLTIP))
+           .SetImage(ui::ImageModel::FromVectorIcon(
+               vector_icons::kShieldIcon, ui::kColorIcon,
+               ui::SimpleMenuModel::kDefaultIconSize))
+diff --git a/chrome/browser/ui/views/js_optimization/js_optimizations_page_action_controller.cc b/chrome/browser/ui/views/js_optimization/js_optimizations_page_action_controller.cc
+index 3fb5490f77..d9f23ce20d 100644
+--- a/chrome/browser/ui/views/js_optimization/js_optimizations_page_action_controller.cc
++++ b/chrome/browser/ui/views/js_optimization/js_optimizations_page_action_controller.cc
+@@ -91,7 +91,7 @@ views::BubbleDialogModelHost* JsOptimizationsPageActionController::CreateBubble(
+     actions::ActionItem* action_item) {
+   auto dialog_model_builder = ui::DialogModel::Builder();
+   dialog_model_builder
+-      .SetTitle(l10n_util::GetStringUTF16(IDS_JS_OPTIMIZATION_BUBBLE_TITLE))
++      .SetTitle(l10n_util::GetStringUTF16(IDS_JS_JIT_BUBBLE_TITLE))
+       .SetDialogDestroyingCallback(base::BindOnce(
+           &JsOptimizationsPageActionController::OnBubbleHidden,
+           weak_factory_.GetWeakPtr(), base::Unretained(action_item)));
+@@ -101,13 +101,13 @@ views::BubbleDialogModelHost* JsOptimizationsPageActionController::CreateBubble(
+       content_settings::SettingSource::kPolicy) {
+     dialog_model_builder.AddParagraph(
+         ui::DialogModelLabel(
+-            l10n_util::GetStringUTF16(IDS_JS_OPTIMIZATION_BUBBLE_POLICY_BODY)),
++            l10n_util::GetStringUTF16(IDS_JS_JIT_BUBBLE_POLICY_BODY)),
+         std::u16string(),
+         JsOptimizationsPageActionController::kBubbleBodyElementId);
+   } else {
+     dialog_model_builder.AddParagraph(
+         ui::DialogModelLabel(l10n_util::GetStringUTF16(
+-            IDS_JS_OPTIMIZATION_BUBBLE_BODY_NON_POLICY_BODY)),
++            IDS_JS_JIT_BUBBLE_BODY_NON_POLICY_BODY)),
+         std::u16string(),
+         JsOptimizationsPageActionController::kBubbleBodyElementId);
+
