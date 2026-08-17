@@ -1,0 +1,54 @@
+--- a/third_party/blink/renderer/core/timezone/timezone_controller.cc
++++ b/third_party/blink/renderer/core/timezone/timezone_controller.cc
+@@ -5,6 +5,7 @@
+ #include "third_party/blink/renderer/core/timezone/timezone_controller.h"
+ 
+ #include "base/feature_list.h"
++#include "build/build_config.h"
+ #include "mojo/public/cpp/bindings/pending_remote.h"
+ #include "mojo/public/cpp/bindings/remote.h"
+ #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
+@@ -32,6 +33,10 @@ namespace blink {
+ 
+ namespace {
+ 
++#if BUILDFLAG(IS_LINUX)
++constexpr char kNormalizedTimezoneId[] = "UTC";
++#endif
++
+ // When enabled, the host timezone id is evaluated only when needed.
+ // TODO(crbug.com/40287434): Cleanup the feature after running the experiment,
+ // no later than January 2025.
+@@ -93,9 +98,14 @@ void NotifyTimezoneChangeOnMainThread() {
+ 
+ TimeZoneController::TimeZoneController() {
+   DCHECK(IsMainThread());
++#if BUILDFLAG(IS_LINUX)
++  host_timezone_id_ = kNormalizedTimezoneId;
++  CHECK(SetIcuTimeZoneAndNotifyV8(host_timezone_id_));
++#else
+   if (!base::FeatureList::IsEnabled(kLazyBlinkTimezoneInit)) {
+     host_timezone_id_ = GetCurrentTimezoneId();
+   }
++#endif
+ }
+ 
+ TimeZoneController::~TimeZoneController() = default;
+@@ -245,12 +255,16 @@ void TimeZoneController::OnTimeZoneChange(const String& timezone_id) {
+ 
+   base::AutoLock locker(instance().lock_);
+ 
++#if BUILDFLAG(IS_LINUX)
++  instance().host_timezone_id_ = kNormalizedTimezoneId;
++#else
+   // Remember requested timezone id so we can set it when timezone
+   // override is removed.
+   instance().host_timezone_id_ = timezone_id;
++#endif
+ 
+   if (!HasTimeZoneOverride())
+-    SetIcuTimeZoneAndNotifyV8(timezone_id);
++    SetIcuTimeZoneAndNotifyV8(instance().host_timezone_id_);
+ }
+ 
+ const String& TimeZoneController::GetHostTimezoneId() {
