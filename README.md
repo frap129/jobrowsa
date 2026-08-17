@@ -4,37 +4,15 @@ Linux builds, packaging, and development tooling for
 Jobrowsa, a Chromium-based browser forked from the
 helium-chromium project.
 
-## Building
+## Usage
 
-To build the binary, run `just build` from the repo root.
+`just` targets:
 
-Running `scripts/build.sh` directly will not work unless you're running a
-Debian-based distro and have all necessary dependencies installed. This repo is
-designed to avoid having to configure the building environment on your Linux
-installation.
-
-### Packaging
-
-To build the `tar.xz` and AppImage files under `build/`, run `just appimage`.
-
-If you would like to also generate a .deb file, run `just deb`.
-
-Arch Linux packages are built with `package/docker-package-arch.sh` (or
-`just arch`), which runs `makepkg` with `package/PKGBUILD` inside an Arch
-container image and produces a `.pkg.tar.zst` under `build/release/`.
-
-### Development
-
-By default, the build script uses tarball. If you need to use a source tree
-clone, you can run `scripts/docker-build.sh -c` instead. This may be useful if
-a tarball for a release isn't available yet.
-
-### Flatpak/Flathub
-
-We will not support Flatpak as long as it's impossible to package Chromium
-without [breaking its sandbox](https://discuss.privacyguides.net/t/does-flatpak-weaken-chromium-firefoxs-sandbox/13373/7).
-We recommend that you use AppImage if an official distro package isn't
-available.
+- `build` — build the browser binary inside a Debian container.
+- `appimage` — package `tar.xz` and AppImage artifacts under `build/`.
+- `deb` — package a `.deb` in addition to `tar.xz` and AppImage.
+- `arch` — package an Arch Linux `.pkg.tar.zst` under `build/release/`.
+- `clean` — remove the `build/` directory.
 
 ## Credits
 
