@@ -15,9 +15,7 @@ installation.
 
 ### Packaging
 
-After building, run `scripts/package.sh`. Alternatively, you can run
-`package/docker-package.sh` to build inside a Docker image. Either of these
-scripts will create `tar.xz` and `AppImage` files under `build/`.
+To build the `tar.xz` and AppImage files under `build/`, run `just appimage`.
 
 If you would like to also generate a .deb file, run `just deb`.
 
