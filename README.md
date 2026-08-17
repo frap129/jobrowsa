@@ -55,6 +55,20 @@ This repo uses some stuff that originally came from
 [ungoogled-chromium-portablelinux](https://github.com/ungoogled-software/ungoogled-chromium-portablelinux)
 before it was fully remade and forked for the helium-chromium project.
 
+### Vanadium
+
+This repo applies privacy and security hardening patches from
+[Vanadium](https://github.com/GrapheneOS/Vanadium), the privacy-hardened
+Chromium-based browser by GrapheneOS. The vendored patch set lives in
+`patches/vanadium/` and is tracked in `trivalent.manifest`.
+
+### Trivalent
+
+The Vanadium and Trivalent patch sets are synced from
+[Trivalent](https://github.com/secureblue/Trivalent), the Chromium-based
+browser maintained by the secureblue project. Vendored patches are tracked in
+`trivalent.manifest`, with sync tooling in `scripts/sync-trivalent.sh`.
+
 ## License
 
 All code, patches, modified portions of imported code or patches, and
