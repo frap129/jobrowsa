@@ -6,13 +6,21 @@ build:
 arch:
     ./package/docker-package-arch.sh
 
-# Package tar.xz and AppImage artifacts under build/
-appimage:
-    ./package/docker-package.sh
+# Package the release tarball and symbols under build/release/
+tarball:
+    ./package/docker-package.sh tarball
 
-# Package a .deb in addition to tar.xz and AppImage
+# Package an AppImage from the release tarball
+appimage:
+    ./package/docker-package.sh appimage
+
+# Package a .deb from the release tarball
 deb:
-    MAKE_DEB=1 ./package/docker-package.sh
+    ./package/docker-package.sh deb
+
+# Package all release artifacts (tarball, AppImage, .deb)
+package:
+    ./package/docker-package.sh all
 
 # Remove the build directory
 clean:

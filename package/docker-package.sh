@@ -5,6 +5,9 @@ _current_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
 _root_dir="$(cd "${_current_dir}/.." && pwd)"
 _git_submodule="helium-chromium"
 
+_stage="${1:-all}"
+if [ "$#" -gt 0 ]; then shift; fi
+
 _image="jobrowsa-trixie-slim:packager"
 
 # select container runtime: prefer rootless Podman, fall back to Docker
@@ -23,7 +26,6 @@ fi
 
 _user_uidgid="$(id -u):$(id -g)"
 _docker_image_args=()
-_make_deb=${MAKE_DEB:-0}
 
 if [ "$_user_uidgid" != "0:0" ]; then
 	_docker_image_args+=(--build-arg "UID=$(id -u)")
@@ -51,6 +53,5 @@ cd "${_root_dir}" && "${_runtime}" run --rm -i \
 	-e APPIMAGE_EXTRACT_AND_RUN=1 \
 	-e HOME=/home/builder \
 	-e GNUPGHOME=/home/builder/.gnupg \
-	-e "MAKE_DEB=$_make_deb" \
 	-v "${_root_dir}:/repo" \
-	"${_image}" bash "/repo/scripts/package.sh" "$@"
+	"${_image}" bash "/repo/scripts/package.sh" "$_stage" "$@"

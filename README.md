@@ -9,8 +9,10 @@ helium-chromium project.
 `just` targets:
 
 - `build` — build the browser binary inside a Debian container.
-- `appimage` — package `tar.xz` and AppImage artifacts under `build/`.
-- `deb` — package a `.deb` in addition to `tar.xz` and AppImage.
+- `package` — package all release artifacts: tarball, AppImage, and `.deb`.
+- `tarball` — package the release tarball and symbols under `build/release/`.
+- `appimage` — package an AppImage from the release tarball.
+- `deb` — package a `.deb` from the release tarball.
 - `arch` — package an Arch Linux `.pkg.tar.zst` under `build/release/`.
 - `clean` — remove the `build/` directory.
 
