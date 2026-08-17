@@ -1,0 +1,100 @@
+--- a/components/crash/core/app/BUILD.gn
++++ b/components/crash/core/app/BUILD.gn
+@@ -242,7 +242,7 @@
+   # We build a chromium-specific crashpad_handler executable so that we can
+   # define custom UserStreamDataSources.
+   executable("chrome_crashpad_handler") {
+-    output_name = "helium_crashpad_handler"
++    output_name = "jobrowsa_crashpad_handler"
+     sources = [ "chrome_crashpad_handler.cc" ]
+ 
+     deps = [
+
+--- a/components/crash/core/app/crashpad_linux.cc
++++ b/components/crash/core/app/crashpad_linux.cc
+@@ -169,7 +169,7 @@
+     if (!base::PathService::Get(base::DIR_EXE, &handler_path)) {
+       return false;
+     }
+-    handler_path = handler_path.Append("helium_crashpad_handler");
++    handler_path = handler_path.Append("jobrowsa_crashpad_handler");
+ 
+     // When --use-cros-crash-reporter is set (below), the handler passes dumps
+     // to ChromeOS's /sbin/crash_reporter which in turn passes the dump to
+
+--- a/chrome/browser/memory_details_linux.cc
++++ b/chrome/browser/memory_details_linux.cc
+@@ -118,7 +118,7 @@
+   ProcessData current_browser =
+       GetProcessDataMemoryInformation(GetAllChildren(process_map, getpid()));
+   current_browser.name = base::ASCIIToUTF16(version_info::GetProductName());
+-  current_browser.process_name = u"helium";
++  current_browser.process_name = u"jobrowsa";
+ 
+   for (auto i = current_browser.processes.begin();
+        i != current_browser.processes.end(); ++i) {
+
+--- a/chrome/BUILD.gn
++++ b/chrome/BUILD.gn
+@@ -151,7 +151,7 @@
+   if (is_win) {
+     _chrome_output_name = "initialexe/chrome"
+   } else {
+-    _chrome_output_name = "helium"
++    _chrome_output_name = "jobrowsa"
+   }
+ 
+   executable("chrome_initial") {
+@@ -1697,19 +1697,19 @@
+       ]
+     }
+     extract_symbols("chrome_symbols") {
+-      binary = "$root_out_dir/helium"
++      binary = "$root_out_dir/jobrowsa"
+ 
+       if (current_cpu == "x86") {
+         # GYP used "ia32" so keep that naming for back-compat.
+-        symbol_file = "$root_out_dir/helium.breakpad.ia32"
++        symbol_file = "$root_out_dir/jobrowsa.breakpad.ia32"
+       } else {
+-        symbol_file = "$root_out_dir/helium.breakpad.$current_cpu"
++        symbol_file = "$root_out_dir/jobrowsa.breakpad.$current_cpu"
+       }
+ 
+       deps = [ ":chrome" ]
+     }
+     extract_symbols("chrome_crashpad_symbols") {
+-      binary = "$root_out_dir/helium_crashpad_handler"
++      binary = "$root_out_dir/jobrowsa_crashpad_handler"
+ 
+       if (current_cpu == "x86") {
+         # GYP used "ia32" so keep that naming for back-compat.
+
+--- a/chrome/installer/linux/BUILD.gn
++++ b/chrome/installer/linux/BUILD.gn
+@@ -61,8 +61,8 @@
+ }
+ 
+ packaging_files_executables = [
+-  "$root_out_dir/helium",
+-  "$root_out_dir/helium_crashpad_handler",
++  "$root_out_dir/jobrowsa",
++  "$root_out_dir/jobrowsa_crashpad_handler",
+ ]
+ 
+ packaging_files_shlibs = []
+@@ -198,12 +198,12 @@
+ }
+ 
+ strip_binary("strip_chrome_binary") {
+-  binary_input = "$root_out_dir/helium"
++  binary_input = "$root_out_dir/jobrowsa"
+   deps = [ "//chrome" ]
+ }
+ 
+ strip_binary("strip_chrome_crashpad_handler") {
+-  binary_input = "$root_out_dir/helium_crashpad_handler"
++  binary_input = "$root_out_dir/jobrowsa_crashpad_handler"
+   deps = [ "//components/crash/core/app:chrome_crashpad_handler" ]
+ }
+ 

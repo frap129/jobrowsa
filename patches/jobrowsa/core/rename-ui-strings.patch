@@ -1,0 +1,70 @@
+--- a/chrome/app/chromium_strings.grd
++++ b/chrome/app/chromium_strings.grd
+@@ -1069,8 +1069,8 @@
+         Customize and control Chromium. Update is available.
+       </message>
+ 
+-      <message name="IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE" desc="The tooltip to show for the browser menu when Helium services schema changes">
+-        Helium services have been updated. Please review the changes.
++      <message name="IDS_APPMENU_TOOLTIP_HELIUM_SERVICES_UPDATE" desc="The tooltip to show for the browser menu when Jobrowsa services schema changes">
++        Jobrowsa services have been updated. Please review the changes.
+       </message>
+ 
+       <message name="IDS_APPMENU_TOOLTIP_ALERT" desc="The tooltip to show for the browser menu when a non-update alert is displayed">
+@@ -1810,9 +1810,9 @@
+         Chromium couldn't update to the latest version, so you're missing out on new features and security fixes.
+       </message>
+ 
+-      <!-- Helium services schema change bubble -->
+-      <message name="IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM" desc="Text for the bubble that notifies the user of a schema change in Helium services.">
+-        Review Helium services updates
++      <!-- Jobrowsa services schema change bubble -->
++      <message name="IDS_HELIUM_SERVICES_SCHEMA_MENU_ITEM" desc="Text for the bubble that notifies the user of a schema change in Jobrowsa services.">
++        Review Jobrowsa services updates
+       </message>
+ 
+       <!-- User menu errors -->
+
+--- a/chrome/app/generated_resources.grd
++++ b/chrome/app/generated_resources.grd
+@@ -295,7 +295,7 @@
+       <!-- Global Media Controls specific strings -->
+       <part file="gmc_strings.grdp" />
+ 
+-      <!-- Helium onboarding strings -->
++      <!-- Jobrowsa onboarding strings -->
+       <part file="../../components/helium_onboarding/helium_onboarding_strings.grdp" />
+ 
+       <!-- Media live preview specific strings -->
+@@ -11580,7 +11580,7 @@
+             Full Disk Access required
+           </message>
+           <message name="IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_MESSAGE" desc="Message for the dialog shown when Full Disk Access is needed to import bookmarks from Safari.">
+-            Helium needs Full Disk Access to import your Bookmarks from Safari.
++            Jobrowsa needs Full Disk Access to import your Bookmarks from Safari.
+           </message>
+           <message name="IDS_IMPORT_FULL_DISK_ACCESS_DIALOG_LINK" desc="Help link text in the dialog shown when Full Disk Access is needed to import from Safari.">
+             Learn how to grant Full Disk Access from your System Preferences.
+@@ -13426,7 +13426,7 @@
+       <message name="IDS_APP_MENU_BUTTON_UPDATE" desc="Short label next to app-menu button when an update is available.">
+         Update
+       </message>
+-      <message name="IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE" desc="Short label next to app-menu button when Helium services behavior changes.">
++      <message name="IDS_APP_MENU_BUTTON_HELIUM_SERVICES_UPDATE" desc="Short label next to app-menu button when Jobrowsa services behavior changes.">
+         Services updated
+       </message>
+       <if expr="is_win or is_macosx or is_linux">
+
+--- a/chrome/app/settings_chromium_strings.grdp
++++ b/chrome/app/settings_chromium_strings.grdp
+@@ -90,8 +90,8 @@
+       <else>
+       <if expr="is_linux">
+         <then>
+-        <message name="IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY" desc="The text displayed when Helium is launched on Linux, but has no existing .desktop file.">
+-          Helium cannot be set as default, because no <ph name="DESKTOP_FILENAME">$1<ex>helium.desktop</ex></ph> file was found in any of: ~/.local/share/applications, /usr/share/applications, /usr/local/share/applications.
++        <message name="IDS_SETTINGS_DEFAULT_BROWSER_SECONDARY" desc="The text displayed when Jobrowsa is launched on Linux, but has no existing .desktop file.">
++          Jobrowsa cannot be set as default, because no <ph name="DESKTOP_FILENAME">$1<ex>jobrowsa.desktop</ex></ph> file was found in any of: ~/.local/share/applications, /usr/share/applications, /usr/local/share/applications.
+         </message>
+         </then>
+         <else>

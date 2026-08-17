@@ -1,0 +1,108 @@
+--- a/chrome/common/channel_info_posix.cc
++++ b/chrome/common/channel_info_posix.cc
+@@ -139,11 +139,11 @@
+   // Allow $CHROME_DESKTOP to override the built-in value, so that development
+   // versions can set themselves as the default without interfering with
+   // non-official, packaged versions using the built-in value.
+-  std::optional<std::string> name = env->GetVar("HELIUM_DESKTOP");
++  std::optional<std::string> name = env->GetVar("JOBROWSA_DESKTOP");
+   if (name.has_value() && !name.value().empty()) {
+     return name.value();
+   }
+-  return "helium.desktop";
++  return "jobrowsa.desktop";
+ #endif
+ }
+ #endif  // BUILDFLAG(IS_LINUX)
+
+--- a/chrome/common/chrome_paths_linux.cc
++++ b/chrome/common/chrome_paths_linux.cc
+@@ -81,7 +81,7 @@
+   std::unique_ptr<base::Environment> env(base::Environment::Create());
+   base::FilePath config_dir;
+   std::optional<std::string> chrome_config_home_str =
+-      env->GetVar("HELIUM_CONFIG_HOME");
++      env->GetVar("JOBROWSA_CONFIG_HOME");
+   if (chrome_config_home_str.has_value() &&
+       base::IsStringUTF8(chrome_config_home_str.value())) {
+     config_dir = base::FilePath::FromUTF8Unsafe(chrome_config_home_str.value());
+@@ -90,7 +90,7 @@
+         GetXDGDirectory(env.get(), kXdgConfigHomeEnvVar, kDotConfigDir);
+   }
+ 
+-  std::string data_dir_basename = "net.imput.helium";
++  std::string data_dir_basename = "jobrowsa";
+   *result = config_dir.Append(data_dir_basename + GetChannelSuffixForDataDir());
+   return true;
+ }
+
+--- a/chrome/installer/linux/common/chromium-browser.info
++++ b/chrome/installer/linux/common/chromium-browser.info
+@@ -6,7 +6,7 @@
+ # chromium-browser packages for various platforms.
+ 
+ # Base name of the package.
+-PACKAGE="helium"
++PACKAGE="jobrowsa"
+ 
+ # Filename of the main executable (for generating launcher scripts, etc.)
+ PROGNAME=chrome
+@@ -18,7 +18,7 @@
+ ENROLLMENTDIR=/etc/chromium/policies/enrollment
+ 
+ # Display string for desktop menu/icon.
+-MENUNAME="Helium"
++MENUNAME="Jobrowsa"
+ 
+ # Brief package description.
+ SHORTDESC="The web browser from the Chromium projects"
+@@ -27,16 +27,16 @@
+ FULLDESC="Chromium is a browser that combines a minimal design with sophisticated technology to make the web faster, safer, and easier."
+ 
+ # Package maintainer information.
+-MAINTNAME="imput"
+-MAINTMAIL="helium@imput.net"
+-PRODUCTURL="https://helium.computer"
++MAINTNAME="The Jobrowsa Authors"
++MAINTMAIL=""
++PRODUCTURL=""
+ 
+ PROJECT_LICENSE="GPL-3.0 and BSD-3-Clause and LGPL-2.1+ and Apache-2.0 and IJG and MIT and GPL-2.0+ and ISC and OpenSSL and (MPL-1.1 or GPL-2.0 or LGPL-2.0)"
+ 
+-DEVELOPER_NAME="The Helium Authors"
++DEVELOPER_NAME="The Jobrowsa Authors"
+ 
+-BUGTRACKERURL="https://github.com/imputnet/helium-linux/issues"
++BUGTRACKERURL=""
+ 
+-HELPURL="https://helium.computer/"
++HELPURL=""
+ 
+-RDN="net.imput.helium"
++RDN="jobrowsa"
+
+--- a/media/audio/pulse/pulse_util.cc
++++ b/media/audio/pulse/pulse_util.cc
+@@ -39,8 +39,8 @@
+ constexpr char kBrowserDisplayName[] = "google-chrome";
+ #define PRODUCT_STRING "Google Chrome"
+ #else
+-constexpr char kBrowserDisplayName[] = "helium";
+-#define PRODUCT_STRING "Helium"
++constexpr char kBrowserDisplayName[] = "jobrowsa";
++#define PRODUCT_STRING "Jobrowsa"
+ #endif
+ 
+ #if defined(DLOPEN_PULSEAUDIO)
+
+--- a/chrome/browser/shell_integration_linux.cc
++++ b/chrome/browser/shell_integration_linux.cc
+@@ -485,7 +485,7 @@
+ }
+ 
+ std::string GetIconName() {
+-  return "helium";
++  return "jobrowsa";
+ }
+ 
+ bool GetExistingShortcutContents(base::Environment* env,

@@ -1,0 +1,28 @@
+--- a/chrome/app/theme/chromium/BRANDING
++++ b/chrome/app/theme/chromium/BRANDING
+@@ -1,9 +1,9 @@
+ COMPANY_FULLNAME=The Helium Authors
+ COMPANY_SHORTNAME=The Helium Authors
+-PRODUCT_FULLNAME=Helium
+-PRODUCT_SHORTNAME=Helium
+-PRODUCT_INSTALLER_FULLNAME=Helium Installer
+-PRODUCT_INSTALLER_SHORTNAME=Helium Installer
++PRODUCT_FULLNAME=Jobrowsa
++PRODUCT_SHORTNAME=Jobrowsa
++PRODUCT_INSTALLER_FULLNAME=Jobrowsa Installer
++PRODUCT_INSTALLER_SHORTNAME=Jobrowsa Installer
+ COPYRIGHT=Copyright @LASTCHANGE_YEAR@ The Helium Authors. All rights reserved.
+ MAC_BUNDLE_ID=net.imput.helium
+ MAC_CREATOR_CODE=Cr24
+
+--- a/chrome/app/chrome_crash_reporter_client.cc
++++ b/chrome/app/chrome_crash_reporter_client.cc
+@@ -130,7 +130,7 @@
+ 
+ void ChromeCrashReporterClient::GetProductInfo(ProductInfo* product_info) {
+   CHECK(product_info);
+-  product_info->product_name = "Helium";
++  product_info->product_name = "Jobrowsa";
+   product_info->version = version_info::GetHeliumVersionNumber();
+   product_info->channel =
+       chrome::GetChannelName(chrome::WithExtendedStable(true));
