@@ -105,3 +105,5 @@ trivalent/linux/configure-gpu-features.patch
 trivalent/linux/disable-global-shortcuts-portal.patch
 trivalent/linux/fix-singleton-hostname.patch
 trivalent/linux/linux-gpu-sandbox.patch
+
+jobrowsa/linux/compiler-hardening.patch

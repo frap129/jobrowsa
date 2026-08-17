@@ -1,0 +1,19 @@
+--- a/build/config/compiler/BUILD.gn
++++ b/build/config/compiler/BUILD.gn
+@@ -477,8 +477,16 @@ config("compiler") {
+     if (is_linux) {
+       cflags += [
+         "-fstack-clash-protection",
++        "-fstrict-flex-arrays=3",
+         "-mharden-sls=all",
+       ]
++
++      if (is_clang && !is_debug && !using_sanitizer && use_sysroot) {
++        cflags += [
++          "-U_FORTIFY_SOURCE",
++          "-D_FORTIFY_SOURCE=3",
++        ]
++      }
+     }
+   }
+ 
