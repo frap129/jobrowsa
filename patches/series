@@ -109,3 +109,5 @@ trivalent/linux/linux-gpu-sandbox.patch
 jobrowsa/linux/compiler-hardening.patch
 jobrowsa/linux/clamp-device-memory.patch
 jobrowsa/linux/normalize-web-timezone.patch
+jobrowsa/linux/normalize-touch-points.patch
+jobrowsa/linux/normalize-hardware-concurrency.patch

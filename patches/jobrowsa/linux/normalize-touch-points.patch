@@ -1,0 +1,25 @@
+--- a/third_party/blink/renderer/core/events/navigator_events.cc
++++ b/third_party/blink/renderer/core/events/navigator_events.cc
+@@ -30,6 +30,7 @@
+ 
+ #include "third_party/blink/renderer/core/events/navigator_events.h"
+ 
++#include "build/build_config.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
+ #include "third_party/blink/renderer/core/frame/navigator.h"
+@@ -39,7 +40,13 @@ namespace blink {
+ 
+ int32_t NavigatorEvents::maxTouchPoints(Navigator& navigator) {
+   LocalDOMWindow* window = navigator.DomWindow();
+-  return window ? window->GetFrame()->GetSettings()->GetMaxTouchPoints() : 0;
++  const int32_t max_touch_points =
++      window ? window->GetFrame()->GetSettings()->GetMaxTouchPoints() : 0;
++#if BUILDFLAG(IS_LINUX)
++  return max_touch_points > 0 ? 5 : 0;
++#else
++  return max_touch_points;
++#endif
+ }
+ 
+ }  // namespace blink
