@@ -6,12 +6,7 @@ helium-chromium project.
 
 ## Building
 
-To build the binary, run `scripts/docker-build.sh` from the repo root.
-
-The `scripts/docker-build.sh` script will:
-1. Create a Docker image of a Debian-based building environment with all
-   required packages (llvm, nodejs and distro packages) included.
-2. Run `scripts/build.sh` inside the Docker image to build Jobrowsa.
+To build the binary, run `just build` from the repo root.
 
 Running `scripts/build.sh` directly will not work unless you're running a
 Debian-based distro and have all necessary dependencies installed. This repo is
@@ -24,8 +19,11 @@ After building, run `scripts/package.sh`. Alternatively, you can run
 `package/docker-package.sh` to build inside a Docker image. Either of these
 scripts will create `tar.xz` and `AppImage` files under `build/`.
 
-If you would like to also generate a .deb file, you can set `MAKE_DEB=1` when
-running the release script.
+If you would like to also generate a .deb file, run `just deb`.
+
+Arch Linux packages are built with `package/docker-package-arch.sh` (or
+`just arch`), which runs `makepkg` with `package/PKGBUILD` inside an Arch
+container image and produces a `.pkg.tar.zst` under `build/release/`.
 
 ### Development
 
