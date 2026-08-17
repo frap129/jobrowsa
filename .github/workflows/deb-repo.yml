@@ -40,16 +40,16 @@ jobs:
 
           cat > repo/conf/distributions <<'EOF'
           Origin: imput
-          Label: Helium
-          Description: Helium .deb repository
+          Label: Jobrowsa
+          Description: Jobrowsa .deb repository
           Codename: stable
           Architectures: amd64 arm64
           Components: main
           SignWith: default
 
           Origin: imput
-          Label: Helium
-          Description: Helium .deb repository
+          Label: Jobrowsa
+          Description: Jobrowsa .deb repository
           Codename: prerelease
           Architectures: amd64 arm64
           Components: main

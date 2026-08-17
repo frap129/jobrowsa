@@ -1,5 +1,5 @@
 name: Package AppImage
-description: Package Helium as AppImage and tar.xz, upload artifacts
+description: Package Jobrowsa as AppImage and tar.xz, upload artifacts
 
 inputs:
   private_key:
@@ -40,39 +40,39 @@ runs:
       id: version
       shell: bash
       run: |
-        helium_version=$(python3 "helium-chromium/utils/helium_version.py" --tree "helium-chromium/" --platform-tree "." --print)
-        echo "version=${helium_version}" >> $GITHUB_OUTPUT
+        jobrowsa_version=$(python3 "helium-chromium/utils/helium_version.py" --tree "helium-chromium/" --platform-tree "." --print)
+        echo "version=${jobrowsa_version}" >> $GITHUB_OUTPUT
 
     - name: Upload AppImage artifact
       uses: actions/upload-artifact@v4
       with:
-        name: helium-${{ steps.version.outputs.version }}-${{ env.ARCH }}-AppImage
-        path: build/release/helium-${{ steps.version.outputs.version }}-${{ env.ARCH }}.AppImage*
+        name: jobrowsa-${{ steps.version.outputs.version }}-${{ env.ARCH }}-AppImage
+        path: build/release/jobrowsa-${{ steps.version.outputs.version }}-${{ env.ARCH }}.AppImage*
         if-no-files-found: error
         compression-level: 0
 
     - name: Upload tar.xz artifact
       uses: actions/upload-artifact@v4
       with:
-        name: helium-${{ steps.version.outputs.version }}-${{ env.ARCH }}-linux
+        name: jobrowsa-${{ steps.version.outputs.version }}-${{ env.ARCH }}-linux
         path: |
-          build/release/helium-${{ steps.version.outputs.version }}-${{ env.ARCH }}_linux.tar.xz
-          build/release/helium-${{ steps.version.outputs.version }}-${{ env.ARCH }}_linux.tar.xz.asc
+          build/release/jobrowsa-${{ steps.version.outputs.version }}-${{ env.ARCH }}_linux.tar.xz
+          build/release/jobrowsa-${{ steps.version.outputs.version }}-${{ env.ARCH }}_linux.tar.xz.asc
         if-no-files-found: error
         compression-level: 0
 
     - name: Upload symbols artifact
       uses: actions/upload-artifact@v4
       with:
-        name: helium-${{ steps.version.outputs.version }}-${{ env.ARCH }}-symbols
-        path: build/release/helium-${{ steps.version.outputs.version }}-${{ env.ARCH }}_symbols.zip
+        name: jobrowsa-${{ steps.version.outputs.version }}-${{ env.ARCH }}-symbols
+        path: build/release/jobrowsa-${{ steps.version.outputs.version }}-${{ env.ARCH }}_symbols.zip
         if-no-files-found: error
         compression-level: 0
 
     - name: Upload .deb artifact
       uses: actions/upload-artifact@v4
       with:
-        name: helium-${{ steps.version.outputs.version }}-${{ env.ARCH }}-deb
-        path: build/release/helium-bin_${{ steps.version.outputs.version }}-1_*.deb
+        name: jobrowsa-${{ steps.version.outputs.version }}-${{ env.ARCH }}-deb
+        path: build/release/jobrowsa-bin_${{ steps.version.outputs.version }}-1_*.deb
         if-no-files-found: error
         compression-level: 0

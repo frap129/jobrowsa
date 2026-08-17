@@ -17,7 +17,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Helium binaries and AppImage
+    name: Build Jobrowsa binaries and AppImage
     strategy:
       matrix:
         arch: [arm64, x86_64]

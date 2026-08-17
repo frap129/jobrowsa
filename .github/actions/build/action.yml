@@ -1,5 +1,5 @@
-name: Build Helium
-description: Build Helium with Docker and upload build cache
+name: Build Jobrowsa
+description: Build Jobrowsa with Docker and upload build cache
 
 inputs:
   prepare-only:

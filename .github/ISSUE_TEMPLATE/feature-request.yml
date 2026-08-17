@@ -14,7 +14,7 @@ body:
         to read that and thus your request will be closed.
 
         If your request is for a feature that would apply to all platforms, and
-        not just Linux, please submit it to the generic "helium" repo instead.
+        not just Linux, please submit it to the "helium-chromium" repo instead.
   - type: input
     id: description
     attributes:

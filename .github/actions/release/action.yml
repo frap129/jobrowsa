@@ -8,27 +8,27 @@ runs:
       id: version
       shell: bash
       run: |
-        helium_version=$(python3 "helium-chromium/utils/helium_version.py" --tree "helium-chromium/" --platform-tree "." --print)
-        echo "version=${helium_version}" >> $GITHUB_OUTPUT
+        jobrowsa_version=$(python3 "helium-chromium/utils/helium_version.py" --tree "helium-chromium/" --platform-tree "." --print)
+        echo "version=${jobrowsa_version}" >> $GITHUB_OUTPUT
 
     - name: Download AppImage artifacts
       uses: actions/download-artifact@v4
       with:
-        pattern: helium-*-AppImage
+        pattern: jobrowsa-*-AppImage
         path: ./release/
         merge-multiple: true
 
     - name: Download tar.xz artifacts
       uses: actions/download-artifact@v4
       with:
-        pattern: helium-*-linux
+        pattern: jobrowsa-*-linux
         path: ./release/
         merge-multiple: true
 
     - name: Download .deb artifacts
       uses: actions/download-artifact@v4
       with:
-        pattern: helium-*-deb
+        pattern: jobrowsa-*-deb
         path: ./release/
         merge-multiple: true
 
@@ -50,7 +50,7 @@ runs:
         COMMIT_NOW=$(submodule_commit_at HEAD)
 
         {
-          printf 'Changes since last build:\n### helium-linux\n```\n'
+          printf 'Changes since last build:\n### jobrowsa-linux\n```\n'
           git log --oneline "$LAST_TAG..HEAD"
           printf '```\n\n### helium-chromium\n```\n'
           git -C helium-chromium log --oneline "$COMMIT_THEN..$COMMIT_NOW"
@@ -67,7 +67,7 @@ runs:
         fail_on_unmatched_files: true
         body_path: ./github_release_note.md
         files: |
-          release/helium-*.AppImage
-          release/helium-*.AppImage.zsync
-          release/helium-*_linux.tar.xz*
-          release/helium-bin_*.deb
+          release/jobrowsa-*.AppImage
+          release/jobrowsa-*.AppImage.zsync
+          release/jobrowsa-*_linux.tar.xz*
+          release/jobrowsa-bin_*.deb
