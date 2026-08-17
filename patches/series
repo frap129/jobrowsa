@@ -107,3 +107,4 @@ trivalent/linux/fix-singleton-hostname.patch
 trivalent/linux/linux-gpu-sandbox.patch
 
 jobrowsa/linux/compiler-hardening.patch
+jobrowsa/linux/clamp-device-memory.patch

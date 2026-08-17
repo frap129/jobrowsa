@@ -1,0 +1,25 @@
+--- a/third_party/blink/common/device_memory/approximated_device_memory.cc
++++ b/third_party/blink/common/device_memory/approximated_device_memory.cc
+@@ -61,7 +61,10 @@ void ApproximatedDeviceMemory::Calculate
+   float kMinMemory = 2.0f;
+   float kMaxMemory = 32.0f;
+ 
+-#if BUILDFLAG(IS_ANDROID)
++#if BUILDFLAG(IS_LINUX)
++    // Use a common upper bound to reduce fingerprintability on Linux.
++    kMaxMemory = 8.0f;
++#elif BUILDFLAG(IS_ANDROID)
+     // Allow smaller lower limits on Android where lower RAM is still common.
+     // Note: As of Jan-2026 some Google Search tests in our test suite
+     // (GoogleAmpSXGStory2019 and BackgroundGoogleStory2019) serve different
+--- a/third_party/blink/common/device_memory/approximated_device_memory_unittest.cc
++++ b/third_party/blink/common/device_memory/approximated_device_memory_unittest.cc
+@@ -66,7 +66,7 @@ TEST_F(ApproximatedDeviceMemoryTest, Get
+   EXPECT_EQ(4, ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
+   ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(8192);  // 8GB
+   EXPECT_EQ(8, ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
+-#if BUILDFLAG(IS_ANDROID)
++#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX)
+   ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(16384);  // 16GB
+   EXPECT_EQ(8, ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
+   ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(32768);  // 32GB
