@@ -1,19 +1,16 @@
 %define version 0.15.4.1
 %global debug_package %{nil}
 
-Name:    helium-bin
+Name:    jobrowsa-bin
 Summary: Private, fast, and honest web browser
 Version: %{version}
 Release: 1%{?dist}
 Group:   web
 License: GPL-3.0
-URL:     https://github.com/imputnet/helium-linux
-Source0: https://github.com/imputnet/helium-linux/releases/download/%{version}/helium-%{version}-x86_64_linux.tar.xz
-Source1: https://github.com/imputnet/helium-linux/releases/download/%{version}/helium-%{version}-arm64_linux.tar.xz
-Source2: net.imput.helium.metainfo.xml
+Source0: jobrowsa-%{version}-x86_64_linux.tar.xz
+Source1: jobrowsa-%{version}-arm64_linux.tar.xz
 
 %if 0%{?debbuild}
-Packager: imput <helium@imput.net>
 Provides: www-browser
 %endif
 
@@ -33,55 +30,50 @@ Private, fast, and honest web browser based on Chromium
 
 %prep
 %ifarch x86_64 amd64
-%setup -q -n helium-%{version}-x86_64_linux
+%setup -q -n jobrowsa-%{version}-x86_64_linux
 %endif
 
 %ifarch aarch64 arm64
-%setup -q -T -b 1 -n helium-%{version}-arm64_linux
+%setup -q -T -b 1 -n jobrowsa-%{version}-arm64_linux
 %endif
 
 %build
 # We are using prebuilt binaries
 
 %install
-%define helium_base /opt/helium
-%define heliumdir %{buildroot}%{helium_base}
+%define jobrowsa_base /opt/jobrowsa
+%define jobrowsadir %{buildroot}%{jobrowsa_base}
 
-mkdir -p %{heliumdir} \
+mkdir -p %{jobrowsadir} \
          %{buildroot}%{_bindir} \
          %{buildroot}%{_datadir}/applications \
-         %{buildroot}%{_datadir}/metainfo \
          %{buildroot}%{_datadir}/icons/hicolor/256x256/apps
 
-cp -a . %{heliumdir}
+cp -a . %{jobrowsadir}
 
 %if 0%{?debbuild}
 sed -Ei "s/(CHROME_VERSION_EXTRA=).*/\1deb/" \
-    %{heliumdir}/helium-wrapper
+    %{jobrowsadir}/jobrowsa-wrapper
 %else
 sed -Ei "s/(CHROME_VERSION_EXTRA=).*/\1rpm/" \
-    %{heliumdir}/helium-wrapper
+    %{jobrowsadir}/jobrowsa-wrapper
 %endif
 
 install -m 644 product_logo_256.png \
-    %{buildroot}%{_datadir}/icons/hicolor/256x256/apps/helium.png
+    %{buildroot}%{_datadir}/icons/hicolor/256x256/apps/jobrowsa.png
 
-install -m 644 %{heliumdir}/helium.desktop \
+install -m 644 %{jobrowsadir}/jobrowsa.desktop \
     %{buildroot}%{_datadir}/applications/
 
-install -m 644 %{SOURCE2} \
-    %{buildroot}%{_datadir}/metainfo/net.imput.helium.metainfo.xml
-
-ln -sf %{helium_base}/helium-wrapper \
-    %{buildroot}%{_bindir}/helium
+ln -sf %{jobrowsa_base}/jobrowsa-wrapper \
+    %{buildroot}%{_bindir}/jobrowsa
 
 %files
 %defattr(-,root,root,-)
-%{helium_base}/
-%{_bindir}/helium
-%{_datadir}/applications/helium.desktop
-%{_datadir}/metainfo/net.imput.helium.metainfo.xml
-%{_datadir}/icons/hicolor/256x256/apps/helium.png
+%{jobrowsa_base}/
+%{_bindir}/jobrowsa
+%{_datadir}/applications/jobrowsa.desktop
+%{_datadir}/icons/hicolor/256x256/apps/jobrowsa.png
 
 %post
 # Refresh icon cache and update desktop database
@@ -89,8 +81,8 @@ ln -sf %{helium_base}/helium-wrapper \
 /bin/touch --no-create %{_datadir}/icons/hicolor > /dev/null 2>&1 || :
 
 if command -v apparmor_parser > /dev/null 2>&1 && [ -d /etc/apparmor.d ]; then
-    cp %{helium_base}/apparmor.cfg /etc/apparmor.d/helium-bin
-    apparmor_parser -r -W -T /etc/apparmor.d/helium-bin || :
+    cp %{jobrowsa_base}/apparmor.cfg /etc/apparmor.d/jobrowsa-bin
+    apparmor_parser -r -W -T /etc/apparmor.d/jobrowsa-bin || :
 fi
 
 %postun
@@ -101,11 +93,11 @@ case "$1" in
         /bin/touch --no-create %{_datadir}/icons/hicolor > /dev/null 2>&1
         /usr/bin/gtk-update-icon-cache %{_datadir}/icons/hicolor > /dev/null 2>&1 || :
 
-        if [ -f /etc/apparmor.d/helium-bin ]; then
+        if [ -f /etc/apparmor.d/jobrowsa-bin ]; then
             if command -v apparmor_parser > /dev/null 2>&1; then
-                apparmor_parser -R /etc/apparmor.d/helium-bin || :
+                apparmor_parser -R /etc/apparmor.d/jobrowsa-bin || :
             fi
-            rm -f /etc/apparmor.d/helium-bin
+            rm -f /etc/apparmor.d/jobrowsa-bin
         fi
         ;;
 esac

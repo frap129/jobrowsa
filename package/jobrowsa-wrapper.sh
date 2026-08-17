@@ -14,4 +14,4 @@ HERE="$(dirname "$CHROME_WRAPPER")"
 export CHROME_WRAPPER
 export LD_LIBRARY_PATH="$HERE:$HERE/lib:$HERE/lib.target${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 
-exec "$HERE/helium" "$@"
+exec "$HERE/jobrowsa" "$@"

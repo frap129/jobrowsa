@@ -1,33 +1,28 @@
-# Helium packaging guidelines
+# Jobrowsa packaging guidelines
 
-This document provides guidelines for packagers creating Helium packages
+This document provides guidelines for packagers creating Jobrowsa packages
 for various Linux distriutions and packaging systems. These guidelines
 aim to ensure consistency across different package formats while
 respecting distribution-specific conventions.
 
 ## Installation
-- The installation prefix of Helium packages is not mandated by
+- The installation prefix of Jobrowsa packages is not mandated by
   upstream. Note that on FHS-compliant distributions, Chromium-based
   browsers are typically installed into /opt or /usr/lib64.
 - The primary executable should be a symbolic link to
-  $prefix/helium-wrapper. On FHS-compliant distributions, it should
+  $prefix/jobrowsa-wrapper. On FHS-compliant distributions, it should
   be installed into `/usr/bin` or `/usr/local/bin`.
 
 ## Branding
-- The primary executable name should be `helium`.
-- The package name should be `helium` if available; `helium-browser`
-  is acceptable otherwise. If the packaging system uses reverse-DNS
-  notation as identifiers, the identifier should be `net.imput.helium`
-  (all lowercase).
+- The primary executable name should be `jobrowsa`.
+- The package name should be `jobrowsa` if available; `jobrowsa-browser`
+  is acceptable otherwise.
 - If built from releases marked as "pre-release", the package name
   should have a `-prerelease` (preferred), `-pre` or `-beta` suffix.
 - If built from GitHub-hosted binaries, the package name should have a
   `-bin` suffix.
-- If installing the desktop file, it should be named `helium.desktop`
-   (or `net.imput.helium.desktop` on systems preferring reverse-DNS
-    naming).
-- If installing icons, the icon name should be `helium`
-  (or `net.imput.helium`).
+- If installing the desktop file, it should be named `jobrowsa.desktop`.
+- If installing icons, the icon name should be `jobrowsa`.
 
 ## Versioning
 - Package versions should match the upstream version number.
@@ -45,7 +40,7 @@ respecting distribution-specific conventions.
 
 ## Security
 - Packages MUST NOT add default arguments that weaken the security of
-  Helium, including but not limited to `--no-sandbox`.
+  Jobrowsa, including but not limited to `--no-sandbox`.
 - Packages MUST NOT be built with disabled build-time security features
   (e.g. `is_cfi=false`).
 

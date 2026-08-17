@@ -1,9 +1,9 @@
-pkgname=helium-bin
-pkgver=${HELIUM_VERSION:?HELIUM_VERSION must be set}
+pkgname=jobrowsa-bin
+pkgver=${JOBROWSA_VERSION:?JOBROWSA_VERSION must be set}
 pkgrel=1
 pkgdesc='Private, fast, and honest web browser'
 arch=('x86_64' 'aarch64')
-url='https://github.com/imputnet/helium-linux'
+url=''
 license=('GPL-3.0-only')
 depends=(
     'alsa-lib'
@@ -39,19 +39,19 @@ optdepends=(
     'vulkan-icd-loader: Vulkan support'
     'xdg-utils: desktop integration'
 )
-provides=('helium' 'www-browser')
-conflicts=('helium')
+provides=('jobrowsa' 'www-browser')
+conflicts=('jobrowsa')
 options=('!debug')
-backup=('etc/apparmor.d/helium-bin')
+backup=('etc/apparmor.d/jobrowsa-bin')
 
 package() {
-    local build_output=${HELIUM_BUILD_OUTPUT:?HELIUM_BUILD_OUTPUT must be set}
-    local package_files=${HELIUM_PACKAGE_FILES:?HELIUM_PACKAGE_FILES must be set}
+    local build_output=${JOBROWSA_BUILD_OUTPUT:?JOBROWSA_BUILD_OUTPUT must be set}
+    local package_files=${JOBROWSA_PACKAGE_FILES:?JOBROWSA_PACKAGE_FILES must be set}
     local files=(
-        helium
+        jobrowsa
         chrome_100_percent.pak
         chrome_200_percent.pak
-        helium_crashpad_handler
+        jobrowsa_crashpad_handler
         chromedriver
         icudtl.dat
         libEGL.so
@@ -65,24 +65,22 @@ package() {
         v8_context_snapshot.bin
     )
 
-    install -dm755 "$pkgdir/usr/lib/helium"
-    cp -a "${files[@]/#/$build_output/}" "$pkgdir/usr/lib/helium/"
-    install -Dm755 "$package_files/helium-wrapper.sh" \
-        "$pkgdir/usr/lib/helium/helium-wrapper"
+    install -dm755 "$pkgdir/usr/lib/jobrowsa"
+    cp -a "${files[@]/#/$build_output/}" "$pkgdir/usr/lib/jobrowsa/"
+    install -Dm755 "$package_files/jobrowsa-wrapper.sh" \
+        "$pkgdir/usr/lib/jobrowsa/jobrowsa-wrapper"
     sed -Ei 's/(CHROME_VERSION_EXTRA=).*/\1"Arch Linux"/' \
-        "$pkgdir/usr/lib/helium/helium-wrapper"
-    ln -s helium "$pkgdir/usr/lib/helium/chrome"
+        "$pkgdir/usr/lib/jobrowsa/jobrowsa-wrapper"
+    ln -s jobrowsa "$pkgdir/usr/lib/jobrowsa/chrome"
 
-    install -Dm644 "$package_files/helium.desktop" \
-        "$pkgdir/usr/share/applications/helium.desktop"
-    install -Dm644 "$pkgdir/usr/lib/helium/product_logo_256.png" \
-        "$pkgdir/usr/share/icons/hicolor/256x256/apps/helium.png"
-    install -Dm644 "$package_files/net.imput.helium.metainfo.xml" \
-        "$pkgdir/usr/share/metainfo/net.imput.helium.metainfo.xml"
+    install -Dm644 "$package_files/jobrowsa.desktop" \
+        "$pkgdir/usr/share/applications/jobrowsa.desktop"
+    install -Dm644 "$pkgdir/usr/lib/jobrowsa/product_logo_256.png" \
+        "$pkgdir/usr/share/icons/hicolor/256x256/apps/jobrowsa.png"
     install -Dm644 "$package_files/apparmor.cfg" \
-        "$pkgdir/etc/apparmor.d/helium-bin"
-    sed -Ei 's|profile helium-bin .* flags=|profile helium-bin "/usr/lib/helium/helium" flags=|' \
-        "$pkgdir/etc/apparmor.d/helium-bin"
+        "$pkgdir/etc/apparmor.d/jobrowsa-bin"
+    sed -Ei 's|profile jobrowsa-bin .* flags=|profile jobrowsa-bin "/usr/lib/jobrowsa/jobrowsa" flags=|' \
+        "$pkgdir/etc/apparmor.d/jobrowsa-bin"
     install -dm755 "$pkgdir/usr/bin"
-    ln -s /usr/lib/helium/helium-wrapper "$pkgdir/usr/bin/helium"
+    ln -s /usr/lib/jobrowsa/jobrowsa-wrapper "$pkgdir/usr/bin/jobrowsa"
 }
