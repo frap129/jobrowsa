@@ -232,4 +232,99 @@ the 2026-08-13 mergability directive).
 
 ## Validation
 
-(Recorded in Task 7.)
+Recorded 2026-08-16 from this repository's workspace.
+
+### Container build
+
+- Command: `_use_existing_image=1 ARCH=x86_64 scripts/docker-build.sh`
+  (existing `chromium-builder:trixie-slim` image; rootless Podman).
+- Source: pristine tree materialized from the verified local
+  `build/download_cache` via `helium-chromium/utils/downloads.py` unpack
+  (downloads.ini + deps.ini); `.downloaded.stamp` present, no
+  `.patched.stamp`/`.domsub.stamp` before the run.
+- Exit: 0. `Build Succeeded: 56448 steps - 2.60/s`; run 2026-08-16
+  10:29:12–16:42:09 EDT.
+- Binaries (executable): `build/src/out/Default/helium` (1464.7M),
+  `build/src/out/Default/chromedriver` (86.3M).
+
+### Headless smoke
+
+- `helium --version`: `Helium 0.15.4.1 (Chromium 151.0.7922.137)` — version
+  includes 151.0.7922.137.
+- **Sandboxed smoke (passing evidence, GPU-capable device):** the exact
+  required command `./helium-runtime/helium --headless=new --disable-gpu
+  --dump-dom --user-data-dir=/tmp/helium-smoke
+  'data:text/html,<title>helium-smoke</title>ok'` was run by the user with no
+  `--no-sandbox` on a separate GPU-capable device; shell exit code 0, output
+  `<html><head><title>helium-smoke</title></head><body>ok</body></html>`.
+  This satisfies the Task 7 headless smoke including its sandboxing
+  requirement (fallback not needed).
+- **Local GPU-less container context (diagnostic only):** in the
+  `chromium-builder:trixie-slim` container on this host the same smoke
+  invocation (data page, `--headless=new --disable-gpu --dump-dom`) with a
+  scratch `--user-data-dir` fails with exit 134 — the GPU child aborts with
+  SIGTRAP (exit 133) three times, then
+  `FATAL: content/browser/gpu/gpu_data_manager_impl_private.cc`
+  `GPU process isn't usable. Goodbye.` A diagnostic rerun
+  (`--enable-logging=stderr --v=1`, same sandboxing) produced no
+  sandbox-initialization error: `sandbox_linux.cc` reports `Activated
+  seccomp-bpf sandbox for process type: utility.` and `renderer.`
+  successfully, and the GPU child's last messages are pre-sandbox-hook DRI
+  failures (`Detected driver version is empty, gpu sandbox may fail`;
+  `dlopen(radeonsi_dri.so) failed`) in a container with no `/dev/dri` and no
+  `radeonsi_dri.so`. That failure is an environmental GPU/driver absence on
+  this host, not a sandbox-initialization failure. The exact-required-command
+  (exit 0) claim above applies only to the user-attested remote sandboxed
+  run.
+- The local `--no-sandbox` run (exit 0, same DOM dump) is recorded here only
+  as an observation and is **not** used as passing evidence; the passing
+  smoke is the sandboxed run above.
+
+### Patch-stack gates
+
+- Patch-structure lint (`helium-chromium/devutils/lint.py`): 7/7 `[OK]` on
+  the root tree and 7/7 `[OK]` on the `helium-chromium` tree (exit 0 both).
+- Zero-fuzz gate (`scripts/sync-trivalent.sh --verify-apply`, Task 6):
+  retained artifacts in `build/.verify-series/` (dated 2026-08-14) record a
+  strict 103-entry run in which every entry is applied individually with
+  `--no-fuzz` (per-entry `patches.py apply --no-fuzz` over a single-entry
+  series; any failure aborts with `FAILED: <entry>`). `entries.list`
+  (103 entries) is identical to committed `patches/series`; the retained
+  `apply.log` is the tail entry of that run (`Applying strictly
+  linux-gpu-sandbox.patch (1/1)`), with zero `FAILED`/`manual attention`
+  markers. Not re-run after the build because the gate requires a pristine
+  tree.
+- Task 6 pinned sync result: manifest `trivalent-snapshot`
+  cdcf6f1a1eafa6cd18fffacc635f846f212d5f08 matches `build/.sync-trivalent/live.json`
+  `sha`; the staged `scripts/sync-trivalent.sh` change adds the nested
+  `patches/trivalent/branding/*` and `patches/third_party/fedora/*` exclusion
+  so nested branding/Fedora patches stay excluded.
+
+### BUILD-02 condition
+
+The headless smoke is satisfied on a GPU-capable device: the exact required
+command (no `--no-sandbox`) exits 0 and dumps
+`<html><head><title>helium-smoke</title></head><body>ok</body></html>` —
+headless rendering of the data page, sandboxed. On this GPU-less container
+host the same smoke invocation with a scratch `--user-data-dir` fails with
+exit 134 for environmental reasons (GPU child SIGTRAP with no DRI drivers —
+see Headless smoke above); that host result is environmental context, not a
+sandbox failure. Interactive graphical-session verification
+(X11/Wayland, `chrome://sandbox`, HTTPS page load) remains UNAVAILABLE on
+this session-less host, as previously recorded in
+`docs/build-baseline-validation.md`.
+
+### Manifest inventory (current committed truth)
+
+- `trivalent.manifest`: 116 rows (94 retained + 22 dropped).
+- Retained (pristine/adapted): 94 = 34 Vanadium + 60 Trivalent, including six
+  Linux-only Trivalent patches (`build-hardening`, `classic-theme-by-default`,
+  `configure-gpu-features`, `disable-global-shortcuts-portal`,
+  `fix-singleton-hostname`, `linux-gpu-sandbox`).
+- Dropped: 22 = 14 Vanadium + 5 cross-platform Trivalent
+  (`disable-background-mode-by-default`, `disable-infobar-for-builds-without-api-key`,
+  `enable-parallel-downloading-by-default`, `enable-vertical-tabs-exposure`,
+  `privacy/disable-gcm`) + 3 fixes (`151-fix-dep-definition`,
+  `remove-sysroot-dependency`, `use-cwd-for-gclient-path`).
+- Committed root `patches/series`: 103 retained entries (6 `helium/linux`,
+  60 `trivalent`, 3 `ungoogled-chromium/portablelinux`, 34 `vanadium`).

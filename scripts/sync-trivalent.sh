@@ -145,7 +145,12 @@ _local_group_for() {
         patches/trivalent/linux | patches/trivalent/fixes)
         printf '%s\n' "$1"
         ;;
-    patches/trivalent/branding | patches/third_party/fedora)
+    # Excluded groups are skipped recursively: the /* alternatives cover
+    # nested subdirectories (upstream may reorganize into deep trees), so
+    # nested branding/Fedora patches stay excluded instead of becoming
+    # unknown groups that trigger "new-group" attention.
+    patches/trivalent/branding | patches/trivalent/branding/* | \
+        patches/third_party/fedora | patches/third_party/fedora/*)
         printf '%s\n' 'excluded'
         ;;
     *)
