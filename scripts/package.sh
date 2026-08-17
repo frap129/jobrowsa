@@ -9,15 +9,15 @@ _app_dir="$_release_dir/Helium.AppDir"
 
 _app_name="helium"
 _version=$(python3 "$_root_dir/helium-chromium/utils/helium_version.py" \
-                   --tree "$_root_dir/helium-chromium" \
-                   --platform-tree "$_root_dir" \
-                   --print)
+    --tree "$_root_dir/helium-chromium" \
+    --platform-tree "$_root_dir" \
+    --print)
 
-_arch=$(cat "$_build_dir/src/out/Default/args.gn" \
-                | grep ^target_cpu \
-                | tail -1 \
-                | sed 's/.*=//' \
-                | cut -d'"' -f2)
+_arch=$(cat "$_build_dir/src/out/Default/args.gn" |
+    grep ^target_cpu |
+    tail -1 |
+    sed 's/.*=//' |
+    cut -d'"' -f2)
 
 if [ "$_arch" = "x64" ]; then
     _arch="x86_64"
@@ -38,15 +38,11 @@ libEGL.so
 libGLESv2.so
 libqt5_shim.so
 libqt6_shim.so
-libvk_swiftshader.so
 libvulkan.so.1
 locales/
 product_logo_256.png
 resources.pak
-v8_context_snapshot.bin
-vk_swiftshader_icd.json
-xdg-mime
-xdg-settings"
+v8_context_snapshot.bin"
 
 echo "copying release files and creating $_tarball_name.tar.xz"
 
@@ -66,29 +62,29 @@ wait
 
 _syms_zip="$_release_dir/${_release_name}_symbols.zip"
 rm -f "$_syms_zip"
-find "$_tarball_dir" -type f -exec file {} + \
-    | awk -F: '/ELF/ {print $1}' \
-    | sed "s|^$_tarball_dir/||" \
-    | (cd "$_build_dir/src/out/Default" && zip -q "$_syms_zip" -@)
+find "$_tarball_dir" -type f -exec file {} + |
+    awk -F: '/ELF/ {print $1}' |
+    sed "s|^$_tarball_dir/||" |
+    (cd "$_build_dir/src/out/Default" && zip -q "$_syms_zip" -@)
 
 if command -v eu-strip >/dev/null 2>&1; then
-    _strip_cmd=eu-strip
+    _strip_cmd=(eu-strip)
 else
-    _strip_cmd="strip --strip-unneeded"
+    _strip_cmd=(strip --strip-unneeded)
 fi
 
-find "$_tarball_dir" -type f -exec file {} + \
-    | awk -F: '/ELF/ {print $1}' \
-    | xargs $_strip_cmd
+find "$_tarball_dir" -type f -exec file {} + |
+    awk -F: '/ELF/ {print $1}' |
+    xargs "${_strip_cmd[@]}"
 
 _size="$(du -sk "$_tarball_dir" | cut -f1)"
 
 pushd "$_release_dir"
 
 TAR_PATH="$_release_dir/$_tarball_name.tar.xz"
-tar vcf - "$_tarball_name" \
-    | pv -s"${_size}k" \
-    | xz -e9 > "$TAR_PATH" &
+tar vcf - "$_tarball_name" |
+    pv -s"${_size}k" |
+    xz -e9 >"$TAR_PATH" &
 
 # create AppImage
 rm -rf "$_app_dir"

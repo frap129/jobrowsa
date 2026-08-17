@@ -1,0 +1,88 @@
+pkgname=helium-bin
+pkgver=${HELIUM_VERSION:?HELIUM_VERSION must be set}
+pkgrel=1
+pkgdesc='Private, fast, and honest web browser'
+arch=('x86_64' 'aarch64')
+url='https://github.com/imputnet/helium-linux'
+license=('GPL-3.0-only')
+depends=(
+    'alsa-lib'
+    'at-spi2-core'
+    'cairo'
+    'cups'
+    'dbus'
+    'expat'
+    'glib2'
+    'glibc'
+    'libdrm'
+    'libx11'
+    'libxcb'
+    'libxcomposite'
+    'libxdamage'
+    'libxext'
+    'libxfixes'
+    'libxkbcommon'
+    'libxrandr'
+    'mesa'
+    'nspr'
+    'nss'
+    'pango'
+    'systemd-libs'
+)
+optdepends=(
+    'gtk3: GTK interface support'
+    'libva: hardware video acceleration'
+    'pipewire: WebRTC screen sharing'
+    'qt5-base: Qt 5 interface support'
+    'qt6-base: Qt 6 interface support'
+    'ttf-liberation: compatible Arial, Times New Roman, and Courier New fonts'
+    'vulkan-icd-loader: Vulkan support'
+    'xdg-utils: desktop integration'
+)
+provides=('helium' 'www-browser')
+conflicts=('helium')
+options=('!debug')
+backup=('etc/apparmor.d/helium-bin')
+
+package() {
+    local build_output=${HELIUM_BUILD_OUTPUT:?HELIUM_BUILD_OUTPUT must be set}
+    local package_files=${HELIUM_PACKAGE_FILES:?HELIUM_PACKAGE_FILES must be set}
+    local files=(
+        helium
+        chrome_100_percent.pak
+        chrome_200_percent.pak
+        helium_crashpad_handler
+        chromedriver
+        icudtl.dat
+        libEGL.so
+        libGLESv2.so
+        libqt5_shim.so
+        libqt6_shim.so
+        libvulkan.so.1
+        locales
+        product_logo_256.png
+        resources.pak
+        v8_context_snapshot.bin
+    )
+
+    install -dm755 "$pkgdir/usr/lib/helium"
+    cp -a "${files[@]/#/$build_output/}" "$pkgdir/usr/lib/helium/"
+    install -Dm755 "$package_files/helium-wrapper.sh" \
+        "$pkgdir/usr/lib/helium/helium-wrapper"
+    sed -Ei 's/(CHROME_VERSION_EXTRA=).*/\1"Arch Linux"/' \
+        "$pkgdir/usr/lib/helium/helium-wrapper"
+    ln -s helium "$pkgdir/usr/lib/helium/chrome"
+
+    install -Dm644 "$package_files/helium.desktop" \
+        "$pkgdir/usr/share/applications/helium.desktop"
+    install -Dm644 "$pkgdir/usr/lib/helium/product_logo_256.png" \
+        "$pkgdir/usr/share/icons/hicolor/256x256/apps/helium.png"
+    install -Dm644 "$package_files/net.imput.helium.metainfo.xml" \
+        "$pkgdir/usr/share/metainfo/net.imput.helium.metainfo.xml"
+    install -Dm644 "$package_files/apparmor.cfg" \
+        "$pkgdir/etc/apparmor.d/helium-bin"
+    sed -Ei 's|profile helium-bin .* flags=|profile helium-bin "/usr/lib/helium/helium" flags=|' \
+        "$pkgdir/etc/apparmor.d/helium-bin"
+    install -dm755 "$pkgdir/usr/bin"
+    ln -s /usr/lib/helium/helium-wrapper "$pkgdir/usr/bin/helium"
+}
