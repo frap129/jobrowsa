@@ -122,6 +122,14 @@ apply_domsub() {
 }
 
 helium_substitution() {
+    # the backup tarball only exists once substitution has completed,
+    # so its presence doubles as a stage stamp; re-running on an
+    # already-substituted tree would abort (or corrupt names)
+    if [ -f "$_namesubs_cache" ]; then
+        echo "Name substitution already done, skipping"
+        return 0
+    fi
+
     python3 "$_main_repo/utils/name_substitution.py" --sub \
         -t "$_src_dir" --backup-path "$_namesubs_cache"
 }
