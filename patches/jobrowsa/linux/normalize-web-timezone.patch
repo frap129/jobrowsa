@@ -25,7 +25,7 @@
    DCHECK(IsMainThread());
 +#if BUILDFLAG(IS_LINUX)
 +  host_timezone_id_ = kNormalizedTimezoneId;
-+  CHECK(SetIcuTimeZoneAndNotifyV8(host_timezone_id_));
++  SetIcuTimeZoneAndNotifyV8(host_timezone_id_);
 +#else
    if (!base::FeatureList::IsEnabled(kLazyBlinkTimezoneInit)) {
      host_timezone_id_ = GetCurrentTimezoneId();
