@@ -153,11 +153,27 @@ write_gn_args() {
         echo "chrome_pgo_phase = 2" | tee -a "${_out_dir}/args.gn"
     fi
 
-    if command -v sccache >/dev/null 2>&1 && env | grep -q ^SCCACHE; then
+    if [ -n "${SISO_REAPI_ADDRESS:-}" ]; then
+        echo 'use_remoteexec = true' | tee -a "${_out_dir}/args.gn"
+    elif command -v sccache >/dev/null 2>&1 && env | grep -q ^SCCACHE; then
         echo 'cc_wrapper = "sccache"' | tee -a "${_out_dir}/args.gn"
     elif command -v ccache >/dev/null; then
         echo 'cc_wrapper = "ccache"' | tee -a "${_out_dir}/args.gn"
     fi
+}
+
+configure_remoteexec() {
+    if [ -z "${SISO_REAPI_ADDRESS:-}" ]; then
+        return 0
+    fi
+
+    export SISO_REAPI_INSTANCE="${SISO_REAPI_INSTANCE:-main}"
+    export RBE_service_no_security=true
+
+    python3 "${_src_dir}/build/config/siso/configure_siso.py" \
+        --reapi_address="${SISO_REAPI_ADDRESS}" \
+        --reapi_instance="${SISO_REAPI_INSTANCE}" \
+        --reapi_backend_config_path=nativelink.star
 }
 
 # fix downloading of prebuilt tools and sysroot files
@@ -220,6 +236,13 @@ setup_toolchain() {
     printf '%s %s\n' 'build/siso/${platform}' "${siso_version}" | \
         "${_src_dir}/third_party/depot_tools/cipd" ensure \
             -ensure-file - -root "${_src_dir}/third_party/siso/cipd"
+
+    # clone.py skips gclient hooks, including the hook that creates this file.
+    local siso_config_dir="${_src_dir}/build/config/siso"
+    if [ ! -f "${siso_config_dir}/backend_config/backend.star" ]; then
+        cp "${siso_config_dir}/backend_config/google.star" \
+            "${siso_config_dir}/backend_config/backend.star"
+    fi
 }
 
 gn_gen() {
@@ -233,6 +256,7 @@ gn_gen() {
 
 build() {
     cd "${_src_dir}"
+    configure_remoteexec
     local siso="${_src_dir}/third_party/siso/cipd/siso"
     local autoninja="${_src_dir}/third_party/depot_tools/autoninja.py"
     SISO_PATH="$siso" "$autoninja" -C "$_out_dir" chrome chromedriver "$@"
