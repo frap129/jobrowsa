@@ -1,10 +1,27 @@
-# jobrowsa-linux
+# Jobrowsa
 
-Linux builds, packaging, and development tooling for
-Jobrowsa, a Chromium-based browser forked from the
-helium-chromium project.
+I'm tired of elements and sciency names. This is my fork, Joe's fork, Joe's bowser, Jobrowsa.
 
-## Usage
+A fork of Helium for Linux with:
+- Trivalent's patches, including Vanadium
+- Fingerprinting Improvements:
+  - Timezone normalized to UTC
+  - CPU count hardcoded to 8
+  - Device memory clamped to 8GB
+  - Max touch points limited to 5
+- Extra hardening compiler flags based on recommendations by [OpenSSF](https://best.openssf.org/Compiler-Hardening-Guides/Compiler-Options-Hardening-Guide-for-C-and-C++.html)
+
+## Building Jobrowsa
+Dependencies:
+- podman or docker
+- just
+
+Build:
+1. Clone this repository using the `--recursive` flag to ensure the settings submodule also gets cloned
+2. `cd` into the cloned repo
+3. Run `just -l` to see build options
+
+### just targets
 
 `just` targets:
 
