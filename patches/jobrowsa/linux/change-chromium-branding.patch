@@ -31,7 +31,7 @@
    }
  
 -  std::string data_dir_basename = "net.imput.helium";
-+  std::string data_dir_basename = "jobrowsa";
++  std::string data_dir_basename = "dev.maples.jobrowsa";
    *result = config_dir.Append(data_dir_basename + GetChannelSuffixForDataDir());
    return true;
  }
@@ -63,23 +63,23 @@
 -MAINTNAME="imput"
 -MAINTMAIL="helium@imput.net"
 -PRODUCTURL="https://helium.computer"
-+MAINTNAME="The Jobrowsa Authors"
++MAINTNAME="frap129 <joe@maples.dev>"
 +MAINTMAIL=""
-+PRODUCTURL=""
++PRODUCTURL="https://github.com/frap129/jobrowsa"
  
  PROJECT_LICENSE="GPL-3.0 and BSD-3-Clause and LGPL-2.1+ and Apache-2.0 and IJG and MIT and GPL-2.0+ and ISC and OpenSSL and (MPL-1.1 or GPL-2.0 or LGPL-2.0)"
  
 -DEVELOPER_NAME="The Helium Authors"
-+DEVELOPER_NAME="The Jobrowsa Authors"
++DEVELOPER_NAME="frap129 <joe@maples.dev>"
  
 -BUGTRACKERURL="https://github.com/imputnet/helium-linux/issues"
-+BUGTRACKERURL=""
++BUGTRACKERURL="https://github.com/frap129/jobrowsa/issues"
  
 -HELPURL="https://helium.computer/"
-+HELPURL=""
++HELPURL="https://github.com/frap129/jobrowsa"
  
 -RDN="net.imput.helium"
-+RDN="jobrowsa"
++RDN="dev.maples.jobrowsa"
 
 --- a/media/audio/pulse/pulse_util.cc
 +++ b/media/audio/pulse/pulse_util.cc
