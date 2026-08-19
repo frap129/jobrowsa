@@ -15,3 +15,7 @@ use_sysroot=true
 use_vaapi=true
 use_system_libffi=false
 use_siso=true
+# sccache rejects compiles carrying clang module flags (-Xclang
+# -fmodules-cache-path, -Xclang -fmodule-file-home-is-cwd) and silently
+# falls back to uncached compilation, so modules must stay off
+use_clang_modules=false
