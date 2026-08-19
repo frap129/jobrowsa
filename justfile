@@ -1,6 +1,6 @@
 # Build the browser binary inside a Debian container
 build:
-    ./scripts/docker-build.sh
+    SCCACHE_DIR=/repo/.sccache ./scripts/docker-build.sh
 
 # Package an Arch Linux .pkg.tar.zst under build/release/
 arch:
