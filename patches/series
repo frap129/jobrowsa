@@ -118,3 +118,4 @@ jobrowsa/core/rename-ui-strings.patch
 jobrowsa/core/rename-helium-scheme.patch
 jobrowsa/core/rename-hardcoded-labels.patch
 jobrowsa/linux/simd-baseline-avx.patch
+jobrowsa/linux/precompile-inline-scripts.patch

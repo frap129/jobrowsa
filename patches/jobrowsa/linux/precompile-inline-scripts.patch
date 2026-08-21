@@ -1,0 +1,11 @@
+--- a/third_party/blink/common/features.cc
++++ b/third_party/blink/common/features.cc
+@@ -2036,7 +2036,7 @@
+ BASE_FEATURE(kUseSandboxTokenForOriginDerivation,
+              base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+-BASE_FEATURE(kPrecompileInlineScripts, base::FEATURE_DISABLED_BY_DEFAULT);
++BASE_FEATURE(kPrecompileInlineScripts, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
+ // Whether we should composite a PLSA (paint layer scrollable area) even if it
+ // means losing lcd text.
