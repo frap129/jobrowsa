@@ -1,0 +1,87 @@
+--- a/build/config/compiler/BUILD.gn
++++ b/build/config/compiler/BUILD.gn
+@@ -25,6 +25,17 @@
+ import("//build/toolchain/rbe.gni")
+ import("//build/toolchain/toolchain.gni")
+ import("//build_overrides/build.gni")
++
++declare_args() {
++  # Baseline SIMD instruction sets for x86/x64 targets. Adapted from Thorium's
++  # build/config/compiler_opt.gni (github.com/Alex313031/thorium).
++  # Inert on other CPUs: consumers below guard on current_cpu. Do NOT assert
++  # use_avx implies x64 here; CI builds arm64 from the same flags.linux.gn.
++  use_sse3 = current_cpu == "x86" || current_cpu == "x64"
++  use_sse41 = false
++  use_sse42 = false
++  use_avx = false
++}
+ 
+ if (current_cpu == "arm" || current_cpu == "arm64") {
+   import("//build/config/arm.gni")
+@@ -983,6 +994,21 @@
+     # We use clang-rt sanitizer runtimes.
+     "-Zexternal-clangrt",
+   ]
++
++  if (current_cpu == "x86" || current_cpu == "x64") {
++    if (use_sse3 && !use_sse41) {
++      rustflags += [ "-Ctarget-feature=+sse3", ]
++    }
++    if (use_sse41 && !use_sse42) {
++      rustflags += [ "-Ctarget-feature=+sse3,+ssse3,+sse4.1", ]
++    }
++    if (use_sse42 && !use_avx) {
++      rustflags += [ "-Ctarget-feature=+sse3,+ssse3,+sse4.1,+sse4.2", ]
++    }
++    if (use_avx) {
++      rustflags += [ "-Ctarget-feature=+sse3,+ssse3,+sse4.1,+sse4.2,+pclmulqdq,+aes,+avx", ]
++    }
++  }
+ 
+   if (!is_win || force_rustc_color_output) {
+     # Colorize error output. The analogous flag is passed for clang. This must
+@@ -2424,6 +2450,32 @@
+   }
+ }
+ 
++config("jobrowsa_simd_optimization") {
++  # Baseline SIMD flags, applied last so they override generic defaults.
++  # Adapted from Thorium's thorium_simd_optimization config (Linux x64 branch).
++  # Raises the x86/x64 baseline to AVX (Sandy Bridge, 2011).
++  cflags = []
++  ldflags = []
++  if (current_cpu == "x86" || current_cpu == "x64") {
++    if (use_sse3) {
++      cflags += [ "-msse3", ]
++      ldflags += [ "-msse3", ]
++    }
++    if (use_sse41) {
++      cflags += [ "-mssse3", "-msse4.1", ]
++      ldflags += [ "-mssse3", "-msse4.1", ]
++    }
++    if (use_sse42) {
++      cflags += [ "-msse4", "-msse4.2", ]
++      ldflags += [ "-msse4.2", ]
++    }
++    if (use_avx) {
++      cflags += [ "-mpclmul", "-maes", "-mavx", ]
++      ldflags += [ "-mpclmul", "-maes", "-mavx", ]
++    }
++  }
++}
++
+ # Optimization -----------------------------------------------------------------
+ #
+ # The BUILDCONFIG file sets the "default_optimization" config on targets by
+--- a/build/config/BUILDCONFIG.gn
++++ b/build/config/BUILDCONFIG.gn
+@@ -429,6 +429,9 @@
+   default_compiler_configs += [ "//build/config:release" ]
+ }
+ 
++# Make sure Jobrowsa SIMD flags come last.
++default_compiler_configs += [ "//build/config/compiler:jobrowsa_simd_optimization" ]
++
+ if (current_os == "zos") {
+   default_compiler_configs += [ "//build/config/zos:compiler" ]
+ }

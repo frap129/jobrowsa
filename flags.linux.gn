@@ -19,3 +19,10 @@ use_siso=true
 # -fmodules-cache-path, -Xclang -fmodule-file-home-is-cwd) and silently
 # falls back to uncached compilation, so modules must stay off
 use_clang_modules=false
+# SIMD baseline (x86-64); args declared by patches/jobrowsa/linux/simd-baseline-avx.patch
+use_sse3 = true
+use_sse41 = true
+use_sse42 = true
+use_avx = true
+# WebRTC AVX2 support (upstream default for clang builds; explicit for clarity)
+rtc_enable_avx2 = true
