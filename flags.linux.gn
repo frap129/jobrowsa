@@ -26,3 +26,11 @@ use_sse42 = true
 use_avx = true
 # WebRTC AVX2 support (upstream default for clang builds; explicit for clarity)
 rtc_enable_avx2 = true
+# Aggressive ThinLTO: deferred optimization pass (default on for official builds)
+thin_lto_enable_optimizations = true
+# Split text into hot/cold sections for better code locality
+use_text_section_splitting = true
+# 256-bit long-vector re-vectorization pass in the WASM compilation pipeline
+v8_enable_wasm_simd256_revec = true
+# Zero-initialize stack variables (hardening; default on for official builds)
+init_stack_vars_zero = true
