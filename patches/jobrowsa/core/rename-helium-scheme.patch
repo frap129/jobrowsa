@@ -1,0 +1,49 @@
+--- a/content/public/common/url_constants.h
++++ b/content/public/common/url_constants.h
+@@ -19,7 +19,7 @@
+ inline constexpr char kChromeDevToolsScheme[] = "devtools";
+ inline constexpr char kChromeErrorScheme[] = "chrome-error";
+ inline constexpr char kChromeUIScheme[] = "chrome";  // Used for WebUIs.
+-inline constexpr char kHeliumUIScheme[] = "helium";  // also used for webuis :3
++inline constexpr char kHeliumUIScheme[] = "jobrowsa";  // also used for webuis :3
+ inline constexpr char kChromeNativeScheme[] = "chrome-native";
+ inline constexpr char kChromeUIUntrustedScheme[] = "chrome-untrusted";
+ inline constexpr char kViewSourceScheme[] = "view-source";
+
+--- a/components/url_formatter/url_fixer.cc
++++ b/components/url_formatter/url_fixer.cc
+@@ -39,7 +39,7 @@
+ 
+ // Hardcode these constants to avoid dependences on //chrome and //content.
+ const char kChromeUIScheme[] = "chrome";
+-const char kHeliumUIScheme[] = "helium";
++const char kHeliumUIScheme[] = "jobrowsa";
+ const char kDevToolsScheme[] = "devtools";
+ const char kChromeUIDefaultHost[] = "version";
+ const char kViewSourceScheme[] = "view-source";
+
+--- a/components/omnibox/browser/builtin_provider.cc
++++ b/components/omnibox/browser/builtin_provider.cc
+@@ -74,7 +74,7 @@
+     for (const std::u16string& url :
+          client_->GetBuiltinsToProvideAsUserTypes()) {
+       DCHECK(url.starts_with(u"chrome://"));
+-      AddBuiltinMatch(std::u16string(url).replace(0, 6, u"helium"),
++      AddBuiltinMatch(std::u16string(url).replace(0, 6, u"jobrowsa"),
+                       std::u16string(), styles);
+     }
+   } else {
+
+--- a/chrome/browser/resources/tab_search/tab_search_item.ts
++++ b/chrome/browser/resources/tab_search/tab_search_item.ts
+@@ -264,8 +264,8 @@
+ 
+     // Show chrome:// if it's a chrome internal url
+     const protocol = new URL(normalizeURL(data.tab.url)).protocol;
+-    if (protocol === 'chrome:' || protocol === 'helium:') {
+-      this.$.secondaryTextInner.prepend(document.createTextNode('helium://'));
++    if (protocol === 'chrome:' || protocol === 'jobrowsa:') {
++      this.$.secondaryTextInner.prepend(document.createTextNode('jobrowsa://'));
+     }
+   }
+ 

@@ -1,0 +1,212 @@
+--- a/components/webui/version/resources/about_version.html
++++ b/components/webui/version/resources/about_version.html
+@@ -64,7 +64,7 @@
+             </button>
+           </td>
+         </tr>
+-        <tr><td class="label">Chromium</td>
++        <tr><td class="label">Jobrowsa</td>
+           <td class="version" id="version">
+             <span id="copy-content">
+               <span>$i18n{version}$i18n{version_suffix}</span>
+
+--- a/chrome/browser/ui/webui/version/version_ui.cc
++++ b/chrome/browser/ui/webui/version/version_ui.cc
+@@ -350,6 +350,6 @@
+                                     : IDS_VERSION_UI_UNOFFICIAL),
+       base::UTF8ToUTF16(GetProductModifier()),
+       l10n_util::GetStringUTF16(VersionUI::VersionProcessorVariation()),
+-      u"Chromium"}, nullptr);
++      u"Jobrowsa"}, nullptr);
+ }
+ #endif  // !BUILDFLAG(IS_ANDROID)
+
+--- a/chrome/app/chrome_main_delegate.cc
++++ b/chrome/app/chrome_main_delegate.cc
+@@ -379,7 +379,7 @@
+ 
+   if (command_line.HasSwitch(switches::kVersion)) {
+     UNSAFE_TODO(printf(
+-        "%s %s (Chromium %s)\n", version_info::GetProductName().data(),
++        "%s %s (Jobrowsa %s)\n", version_info::GetProductName().data(),
+         version_info::GetHeliumVersionNumber().data(),
+         version_info::GetVersionNumber().data()));
+     return true;
+
+--- a/chrome/browser/helium_flag_entries.h
++++ b/chrome/browser/helium_flag_entries.h
+@@ -10,54 +10,54 @@
+     {helium::kEnergySaverFrameRateCommandLine,
+      "Maximum frame rate for Energy Saver",
+      "Configures the frame rate the browser is throttled to when Energy Saver "
+-     "is enabled. Helium flag.",
++     "is enabled. Jobrowsa flag.",
+      kOsDesktop, MULTI_VALUE_TYPE(helium::kEnergySaverFrameRateChoices)},
+     {"bookmark-open-all-confirmation", "Bookmark open-all confirmation",
+-     "Controls whether Helium asks for confirmation before opening 15 or more "
+-     "bookmarks at once. Helium flag.",
++     "Controls whether Jobrowsa asks for confirmation before opening 15 or more "
++     "bookmarks at once. Jobrowsa flag.",
+      kOsDesktop, FEATURE_VALUE_TYPE(features::kBookmarkOpenAllConfirmation)},
+     {helium::kChannelCommandLine, "Update channel",
+-     "Selects which update channel to use for update checking. Helium flag.",
++     "Selects which update channel to use for update checking. Jobrowsa flag.",
+      kOsAll, MULTI_VALUE_TYPE(helium::kChannelChoices)},
+     {helium::kUpdateServerUrlCommandLine, "Update server URL",
+      "Overrides the default URL for fetching updates. Should be used only for "
+-     "testing. Helium flag.",
++     "testing. Jobrowsa flag.",
+      kOsDesktop, STRING_VALUE_TYPE(helium::kUpdateServerUrlCommandLine, "")},
+     {helium::kMiddleClickAutoscrollCommandLine, "Middle Click Autoscroll",
+-     "Enables autoscroll on middle click. Helium flag, Chromium feature.",
++     "Enables autoscroll on middle click. Jobrowsa flag, Jobrowsa feature.",
+      kOsDesktop,
+      FEATURE_VALUE_TYPE(blink::features::kHeliumMiddleClickAutoscroll)},
+-    {helium::kHeliumNoiseCommandLine, "Helium Noise",
+-     "Helium's anti-fingerprinting functionality. Adds insignificant noise to "
++    {helium::kHeliumNoiseCommandLine, "Jobrowsa Noise",
++     "Jobrowsa's anti-fingerprinting functionality. Adds insignificant noise to "
+      "various features to deceive fingerprinting scripts. Enabled by default, "
+-     "must be enabled for other anti-fingerprinting features to work. Helium "
++     "must be enabled for other anti-fingerprinting features to work. Jobrowsa "
+      "flag.",
+      kOsAll, FEATURE_VALUE_TYPE(blink::features::kHeliumNoise)},
+     {helium::kHeliumNoiseCanvasCommandLine,
+-     "[Helium Noise] Canvas pixel noising",
++     "[Jobrowsa Noise] Canvas pixel noising",
+      "Adds insignificant noise to canvas pixels during readback to deceive "
+-     "canvas-based fingerprinting. Helium flag.",
++     "canvas-based fingerprinting. Jobrowsa flag.",
+      kOsAll, FEATURE_VALUE_TYPE(blink::features::kHeliumNoiseCanvas)},
+     {helium::kHeliumNoiseAudioCommandLine,
+-     "[Helium Noise] Jitter audio context data",
++     "[Jobrowsa Noise] Jitter audio context data",
+      "Adds insignificant jitter to audio data to deceive AudioContext-based "
+-     "fingerprinting. Helium flag.",
++     "fingerprinting. Jobrowsa flag.",
+      kOsAll, FEATURE_VALUE_TYPE(blink::features::kHeliumNoiseAudio)},
+     {helium::kHeliumNoiseCpuCoresCommandLine,
+-     "[Helium Noise] Normalize number of CPU cores",
+-     "Reports 8 cores through `navigator.hardwareConcurrency`. Helium flag.",
++     "[Jobrowsa Noise] Normalize number of CPU cores",
++     "Reports 8 cores through `navigator.hardwareConcurrency`. Jobrowsa flag.",
+      kOsAll, FEATURE_VALUE_TYPE(blink::features::kHeliumNoiseCpuCores)},
+     // core/network
+     {helium::kDisableEchCommandLine, "Disable Encrypted Client Hello (ECH)",
+      "Disables TLS Encrypted Client Hello, reducing traffic privacy when "
+      "accessing websites that support ECH. Use this flag only if ECH is "
+-     "blocked on your network. Helium flag.",
++     "blocked on your network. Jobrowsa flag.",
+      kOsAll, SINGLE_VALUE_TYPE(helium::kDisableEchCommandLine)},
+     {"quic-v2-only", "Use only QUIC v2 for HTTP/3",
+      "Restricts HTTP/3 connections to QUIC v2 instead of default QUIC v1. This "
+      "may help on networks that block QUIC v1 but do not recognize QUIC v2. It "
+      "does not force QUIC on unsupported sites. Connections may fall back to "
+-     "TCP when the server does not support QUIC v2. Helium flag.",
++     "TCP when the server does not support QUIC v2. Jobrowsa flag.",
+      kOsAll, SINGLE_VALUE_TYPE_AND_VALUE(switches::kQuicVersion, "RFCv2")},
+     {helium::kHeliumSplitClientHelloCommandLine,
+      "Random TLS ClientHello splitting",
+@@ -67,24 +67,24 @@
+      "filtering, but it does not hide DNS queries or destination IP addresses "
+      "and makes TLS traffic unusual and potentially recognizable. Some "
+      "middleboxes and TLS endpoints mishandle this behavior and may become "
+-     "inaccessible. Helium flag.",
++     "inaccessible. Jobrowsa flag.",
+      kOsAll, FEATURE_VALUE_TYPE(net::features::kHeliumSplitClientHello)},
+     {"no-proxy-server", "Ignore system proxy",
+      "Ignores system proxy settings and always connects directly. This may "
+-     "prevent access to networks that require a proxy. Helium flag.",
++     "prevent access to networks that require a proxy. Jobrowsa flag.",
+      kOsAll, SINGLE_VALUE_TYPE(switches::kNoProxyServer)},
+     // ui
+     {helium::kHeliumCompactLocationWidthCommandLine,
+      "Automatic address bar width in compact layout",
+      "Allows the location bar to automatically reduce its width in the compact "
+-     "browser layout. The omnibox may be uncomfortable to use. Helium flag.",
++     "browser layout. The omnibox may be uncomfortable to use. Jobrowsa flag.",
+      kOsDesktop, FEATURE_VALUE_TYPE(features::kHeliumCompactLocationWidth)},
+     {helium::kHeliumNativeFrameMaterialsCommandLine, "Native frame materials",
+      "Enables an option to apply native materials to the browser frame "
+-     "surfaces. May cause UI clarity issues. Helium flag.",
++     "surfaces. May cause UI clarity issues. Jobrowsa flag.",
+      kOsMac, FEATURE_VALUE_TYPE(features::kHeliumNativeFrameMaterials)},
+     // platform
+     {helium::kMiddleClickPasteEnabledCommandLine, "Middle Click Paste",
+-     "Controls middle click paste functionality. Helium flag.", kOsLinux,
++     "Controls middle click paste functionality. Jobrowsa flag.", kOsLinux,
+      FEATURE_VALUE_TYPE(features::kMiddleClickPasteEnabled)},
+ #endif  // CHROME_BROWSER_HELIUM_FLAG_ENTRIES_H_
+
+--- a/components/helium_services/schema.cc
++++ b/components/helium_services/schema.cc
+@@ -30,7 +30,7 @@
+           {
+             1,
+             "Automatic component updates are now available. They're managed by the same toggle that enables automatic browser updates.\n"
+-            "From now on, you'll be notified about major changes to Helium services. Even though these notifications are extremely rare, you can choose to ignore them and accept all future changes automatically."
++            "From now on, you'll be notified about major changes to Jobrowsa services. Even though these notifications are extremely rare, you can choose to ignore them and accept all future changes automatically."
+           }
+       });
+ 
+
+--- a/components/webui/chrome_urls/resources/app.html.ts
++++ b/components/webui/chrome_urls/resources/app.html.ts
+@@ -9,7 +9,7 @@
+ export function getHtml(this: ChromeUrlsAppElement) {
+   // clang-format off
+   return html`
+-<h2>List of Chrome URLs</h2>
++<h2>List of Jobrowsa URLs</h2>
+ <ul>
+   ${this.webuiUrlInfos_.map(info => html`
+     ${this.isChromeUrlsUrl_(info) ?
+
+--- a/components/helium_onboarding/index.html
++++ b/components/helium_onboarding/index.html
+@@ -5,7 +5,7 @@
+     <meta charset="UTF-8" />
+     <link rel="icon" type="image/png" href="/favicon.png" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+-    <title>Helium Setup</title>
++    <title>Jobrowsa Setup</title>
+ </head>
+ 
+ <body>
+
+--- a/components/extstore_fixups/chrome-webstore.js
++++ b/components/extstore_fixups/chrome-webstore.js
+@@ -24,7 +24,7 @@
+         return false;
+       }
+ 
+-      el.nodeValue = el.nodeValue.replace(/\b(Google\s)?Chrome\b/, 'Helium');
++      el.nodeValue = el.nodeValue.replace(/\b(Google\s)?Chrome\b/, 'Jobrowsa');
+       return true;
+     } else if (el.childNodes) {
+       for (const node of el.childNodes) {
+
+--- a/third_party/ublock/assets/assets.json
++++ b/third_party/ublock/assets/assets.json
+@@ -28,8 +28,8 @@
+ 	"helium-annoyances": {
+ 		"content": "filters",
+ 		"group": "default",
+-		"parent": "Helium filters",
+-		"title": "Helium filters – Annoyances",
++		"parent": "Jobrowsa filters",
++		"title": "Jobrowsa filters – Annoyances",
+ 		"tags": "annoyances",
+ 		"contentURL": [
+ 			"assets/helium/annoyances.txt"
+@@ -38,8 +38,8 @@
+ 	"helium-unbreak": {
+ 		"content": "filters",
+ 		"group": "default",
+-		"parent": "Helium filters",
+-		"title": "Helium filters – Unbreak",
++		"parent": "Jobrowsa filters",
++		"title": "Jobrowsa filters – Unbreak",
+ 		"contentURL": [
+ 			"assets/helium/unbreak.txt"
+ 		]

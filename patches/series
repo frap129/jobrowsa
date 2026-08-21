@@ -115,3 +115,5 @@ jobrowsa/linux/change-chromium-branding.patch
 jobrowsa/linux/rename-chrome-binary.patch
 jobrowsa/core/rename-product-branding.patch
 jobrowsa/core/rename-ui-strings.patch
+jobrowsa/core/rename-helium-scheme.patch
+jobrowsa/core/rename-hardcoded-labels.patch
