@@ -1,6 +1,6 @@
 # Build the browser binary inside a Debian container
 build:
-    SCCACHE_DIR=/repo/.sccache ./scripts/docker-build.sh
+    if [ -f build/src/out/Default/build.ninja ]; then SCCACHE_DIR=/repo/.sccache ./scripts/resume-build.sh; else SCCACHE_DIR=/repo/.sccache ./scripts/docker-build.sh; fi
 
 # Package an Arch Linux .pkg.tar.zst under build/release/
 arch:
