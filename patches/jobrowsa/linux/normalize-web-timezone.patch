@@ -1,50 +1,300 @@
 --- a/third_party/blink/renderer/core/timezone/timezone_controller.cc
 +++ b/third_party/blink/renderer/core/timezone/timezone_controller.cc
-@@ -5,6 +5,7 @@
+@@ -4,9 +4,20 @@
+ 
  #include "third_party/blink/renderer/core/timezone/timezone_controller.h"
  
++#include <algorithm>
++#include <array>
++#include <memory>
++#include <optional>
++#include <string>
++#include <string_view>
++#include <utility>
++
  #include "base/feature_list.h"
++#include "base/time/time.h"
 +#include "build/build_config.h"
  #include "mojo/public/cpp/bindings/pending_remote.h"
  #include "mojo/public/cpp/bindings/remote.h"
++#include "third_party/blink/public/common/features.h"
  #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
-@@ -32,6 +33,10 @@ namespace blink {
+ #include "third_party/blink/public/platform/platform.h"
+ #include "third_party/blink/public/platform/task_type.h"
+@@ -25,6 +36,7 @@
+ #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
+ #include "third_party/blink/renderer/platform/wtf/text/unicode_string.h"
+ #include "third_party/blink/renderer/platform/wtf/wtf.h"
++#include "third_party/icu/source/i18n/unicode/basictz.h"
+ #include "third_party/icu/source/i18n/unicode/timezone.h"
+ #include "v8/include/v8.h"
+ 
+@@ -32,6 +44,127 @@
  
  namespace {
  
 +#if BUILDFLAG(IS_LINUX)
-+constexpr char kNormalizedTimezoneId[] = "UTC";
-+#endif
++
++// Approved anonymity cohorts mapping canonical ICU timezone ids to their
++// representative spelling.
++constexpr auto kCohortTable =
++    std::to_array<std::pair<std::string_view, std::string_view>>({
++    {"America/New_York", "America/New_York"},
++    {"America/Toronto", "America/New_York"}, {"America/Iqaluit", "America/New_York"},
++    {"America/Port-au-Prince", "America/New_York"}, {"America/Grand_Turk", "America/New_York"},
++    {"America/Detroit", "America/New_York"}, {"America/Kentucky/Louisville", "America/New_York"},
++    {"America/Kentucky/Monticello", "America/New_York"}, {"America/Indiana/Indianapolis", "America/New_York"},
++    {"America/Indiana/Vincennes", "America/New_York"}, {"America/Indiana/Winamac", "America/New_York"},
++    {"America/Indiana/Marengo", "America/New_York"}, {"America/Indiana/Petersburg", "America/New_York"},
++    {"America/Indiana/Vevay", "America/New_York"},
++    {"America/Chicago", "America/Chicago"}, {"America/Winnipeg", "America/Chicago"},
++    {"America/Resolute", "America/Chicago"}, {"America/Rankin_Inlet", "America/Chicago"},
++    {"America/Matamoros", "America/Chicago"}, {"America/Ojinaga", "America/Chicago"},
++    {"America/Indiana/Tell_City", "America/Chicago"}, {"America/Indiana/Knox", "America/Chicago"},
++    {"America/Menominee", "America/Chicago"}, {"America/North_Dakota/Center", "America/Chicago"},
++    {"America/North_Dakota/New_Salem", "America/Chicago"}, {"America/North_Dakota/Beulah", "America/Chicago"},
++    {"America/Denver", "America/Denver"}, {"America/Cambridge_Bay", "America/Denver"},
++    {"America/Ciudad_Juarez", "America/Denver"}, {"America/Boise", "America/Denver"},
++    {"America/Los_Angeles", "America/Los_Angeles"}, {"America/Tijuana", "America/Los_Angeles"},
++    {"America/Anchorage", "America/Anchorage"}, {"America/Juneau", "America/Anchorage"},
++    {"America/Sitka", "America/Anchorage"}, {"America/Metlakatla", "America/Anchorage"},
++    {"America/Yakutat", "America/Anchorage"}, {"America/Nome", "America/Anchorage"},
++    {"America/Halifax", "America/Halifax"}, {"Atlantic/Bermuda", "America/Halifax"},
++    {"America/Glace_Bay", "America/Halifax"}, {"America/Moncton", "America/Halifax"},
++    {"America/Goose_Bay", "America/Halifax"}, {"America/Thule", "America/Halifax"},
++    {"Europe/Paris", "Europe/Paris"}, {"Europe/Andorra", "Europe/Paris"},
++    {"Europe/Tirane", "Europe/Paris"}, {"Europe/Vienna", "Europe/Paris"},
++    {"Europe/Brussels", "Europe/Paris"}, {"Europe/Zurich", "Europe/Paris"},
++    {"Europe/Prague", "Europe/Paris"}, {"Europe/Berlin", "Europe/Paris"},
++    {"Europe/Madrid", "Europe/Paris"}, {"Africa/Ceuta", "Europe/Paris"},
++    {"Europe/Gibraltar", "Europe/Paris"}, {"Europe/Budapest", "Europe/Paris"},
++    {"Europe/Rome", "Europe/Paris"}, {"Europe/Malta", "Europe/Paris"},
++    {"Europe/Warsaw", "Europe/Paris"}, {"Europe/Belgrade", "Europe/Paris"},
++    {"Europe/London", "Europe/London"}, {"Atlantic/Canary", "Europe/London"},
++    {"Atlantic/Faroe", "Europe/London"}, {"Europe/Lisbon", "Europe/London"},
++    {"Atlantic/Madeira", "Europe/London"},
++    {"Europe/Athens", "Europe/Athens"}, {"Europe/Sofia", "Europe/Athens"},
++    {"Asia/Nicosia", "Europe/Athens"}, {"Asia/Famagusta", "Europe/Athens"},
++    {"Europe/Tallinn", "Europe/Athens"}, {"Europe/Helsinki", "Europe/Athens"},
++    {"Europe/Vilnius", "Europe/Athens"}, {"Europe/Riga", "Europe/Athens"},
++    {"Europe/Chisinau", "Europe/Athens"}, {"Europe/Bucharest", "Europe/Athens"},
++    {"Europe/Kyiv", "Europe/Athens"},
++    {"Australia/Sydney", "Australia/Sydney"}, {"Antarctica/Macquarie", "Australia/Sydney"},
++    {"Australia/Hobart", "Australia/Sydney"}, {"Australia/Melbourne", "Australia/Sydney"},
++    {"Australia/Adelaide", "Australia/Adelaide"}, {"Australia/Broken_Hill", "Australia/Adelaide"},
++    {"Africa/Casablanca", "Africa/Casablanca"}, {"Africa/El_Aaiun", "Africa/Casablanca"},
++    {"America/Sao_Paulo", "America/Sao_Paulo"},
++    {"America/Argentina/Buenos_Aires", "America/Sao_Paulo"}, {"America/Argentina/Cordoba", "America/Sao_Paulo"},
++    {"America/Argentina/Mendoza", "America/Sao_Paulo"}, {"America/Fortaleza", "America/Sao_Paulo"},
++    {"America/Recife", "America/Sao_Paulo"}, {"America/Bahia", "America/Sao_Paulo"},
++    {"America/Asuncion", "America/Sao_Paulo"}, {"America/Montevideo", "America/Sao_Paulo"},
++    {"America/Cayenne", "America/Sao_Paulo"}, {"America/Paramaribo", "America/Sao_Paulo"},
++    {"America/Punta_Arenas", "America/Sao_Paulo"}, {"America/Coyhaique", "America/Sao_Paulo"},
++    {"Atlantic/Stanley", "America/Sao_Paulo"},
++    {"America/Bogota", "America/Bogota"}, {"America/Lima", "America/Bogota"},
++    {"America/Guayaquil", "America/Bogota"}, {"America/Panama", "America/Bogota"},
++    {"America/Cancun", "America/Bogota"}, {"America/Jamaica", "America/Bogota"},
++    {"America/Santo_Domingo", "America/Santo_Domingo"}, {"America/Caracas", "America/Santo_Domingo"},
++    {"America/La_Paz", "America/Santo_Domingo"}, {"America/Manaus", "America/Santo_Domingo"},
++    {"America/Cuiaba", "America/Santo_Domingo"}, {"America/Puerto_Rico", "America/Santo_Domingo"},
++    {"America/Guyana", "America/Santo_Domingo"}, {"America/Martinique", "America/Santo_Domingo"},
++    {"America/Barbados", "America/Santo_Domingo"},
++    {"America/Mexico_City", "America/Mexico_City"}, {"America/Merida", "America/Mexico_City"},
++    {"America/Monterrey", "America/Mexico_City"}, {"America/Chihuahua", "America/Mexico_City"},
++    {"America/Bahia_Banderas", "America/Mexico_City"},
++    {"America/Phoenix", "America/Phoenix"}, {"America/Hermosillo", "America/Phoenix"},
++    {"America/Mazatlan", "America/Phoenix"},
++    {"Africa/Abidjan", "Africa/Abidjan"}, {"Africa/Bissau", "Africa/Abidjan"},
++    {"Africa/Monrovia", "Africa/Abidjan"}, {"Africa/Sao_Tome", "Africa/Abidjan"},
++    {"Africa/Lagos", "Africa/Lagos"}, {"Africa/Algiers", "Africa/Lagos"},
++    {"Africa/Tunis", "Africa/Lagos"}, {"Africa/Ndjamena", "Africa/Lagos"},
++    {"Africa/Johannesburg", "Africa/Johannesburg"}, {"Africa/Maputo", "Africa/Johannesburg"},
++    {"Africa/Windhoek", "Africa/Johannesburg"}, {"Africa/Tripoli", "Africa/Johannesburg"},
++    {"Africa/Khartoum", "Africa/Johannesburg"}, {"Africa/Juba", "Africa/Johannesburg"},
++    {"Asia/Dubai", "Asia/Dubai"}, {"Asia/Baku", "Asia/Dubai"},
++    {"Asia/Tbilisi", "Asia/Dubai"}, {"Asia/Yerevan", "Asia/Dubai"},
++    {"Indian/Mauritius", "Asia/Dubai"},
++    {"Asia/Karachi", "Asia/Karachi"}, {"Asia/Tashkent", "Asia/Karachi"},
++    {"Asia/Samarkand", "Asia/Karachi"}, {"Asia/Ashgabat", "Asia/Karachi"},
++    {"Asia/Dushanbe", "Asia/Karachi"}, {"Asia/Yekaterinburg", "Asia/Karachi"},
++    {"Asia/Almaty", "Asia/Karachi"}, {"Indian/Maldives", "Asia/Karachi"},
++    {"Asia/Kolkata", "Asia/Kolkata"}, {"Asia/Colombo", "Asia/Kolkata"},
++    {"Asia/Jakarta", "Asia/Jakarta"}, {"Asia/Bangkok", "Asia/Jakarta"},
++    {"Asia/Ho_Chi_Minh", "Asia/Jakarta"}, {"Asia/Novosibirsk", "Asia/Jakarta"},
++    {"Asia/Krasnoyarsk", "Asia/Jakarta"},
++    {"Asia/Shanghai", "Asia/Shanghai"}, {"Asia/Hong_Kong", "Asia/Shanghai"},
++    {"Asia/Singapore", "Asia/Shanghai"}, {"Asia/Taipei", "Asia/Shanghai"},
++    {"Asia/Manila", "Asia/Shanghai"}, {"Asia/Macau", "Asia/Shanghai"},
++    {"Australia/Perth", "Asia/Shanghai"}, {"Asia/Ulaanbaatar", "Asia/Shanghai"},
++    {"Asia/Tokyo", "Asia/Tokyo"}, {"Asia/Seoul", "Asia/Tokyo"},
++    {"Asia/Pyongyang", "Asia/Tokyo"},
++    {"Australia/Brisbane", "Australia/Brisbane"}, {"Australia/Lindeman", "Australia/Brisbane"},
++    });
++
++std::optional<icu::UnicodeString> CanonicalSystemId(const String& id) {
++  UErrorCode status = U_ZERO_ERROR;
++  UBool is_system_id = false;
++  icu::UnicodeString canonical;
++  icu::TimeZone::getCanonicalID(
++      icu::UnicodeString(id.Ascii().data(), -1, US_INV), canonical,
++      is_system_id, status);
++  if (U_FAILURE(status) || !is_system_id) {
++    return std::nullopt;
++  }
++  return canonical;
++}
++
++bool IsExcludedFixedId(const String& native_id,
++                       const icu::UnicodeString& canonical_id) {
++  const String canonical(unicode::ToSpan(canonical_id));
++  return native_id == "UTC" || native_id == "GMT" ||
++         canonical == "Etc/UTC" || canonical == "Etc/GMT" ||
++         canonical_id.startsWith(icu::UnicodeString("Etc/GMT", -1, US_INV));
++}
++
++#endif  // BUILDFLAG(IS_LINUX)
 +
  // When enabled, the host timezone id is evaluated only when needed.
  // TODO(crbug.com/40287434): Cleanup the feature after running the experiment,
  // no later than January 2025.
-@@ -93,9 +98,14 @@ void NotifyTimezoneChangeOnMainThread() {
+@@ -93,6 +226,16 @@
  
  TimeZoneController::TimeZoneController() {
    DCHECK(IsMainThread());
 +#if BUILDFLAG(IS_LINUX)
-+  host_timezone_id_ = kNormalizedTimezoneId;
-+  SetIcuTimeZoneAndNotifyV8(host_timezone_id_);
-+#else
++  if (base::FeatureList::IsEnabled(features::kHeliumNoise)) {
++    const String native_id = GetCurrentTimezoneId();
++    const base::Time now = base::Time::Now();
++    host_timezone_id_ =
++        NormalizeHostTimezoneId(native_id, now, now + base::Days(3653));
++    SetIcuTimeZoneAndNotifyV8(host_timezone_id_);
++    return;
++  }
++#endif
    if (!base::FeatureList::IsEnabled(kLazyBlinkTimezoneInit)) {
      host_timezone_id_ = GetCurrentTimezoneId();
    }
-+#endif
+@@ -117,6 +260,91 @@
+   return instance;
  }
  
- TimeZoneController::~TimeZoneController() = default;
-@@ -245,12 +255,16 @@ void TimeZoneController::OnTimeZoneChange(const String& timezone_id) {
- 
-   base::AutoLock locker(instance().lock_);
++// static
++String TimeZoneController::NormalizeHostTimezoneId(
++    const String& native_id,
++    base::Time validation_start,
++    base::Time validation_end) {
++#if BUILDFLAG(IS_LINUX)
++  if (!base::FeatureList::IsEnabled(features::kHeliumNoise)) {
++    return native_id;
++  }
++
++  const std::optional<icu::UnicodeString> canonical_source =
++      CanonicalSystemId(native_id);
++  if (!canonical_source || IsExcludedFixedId(native_id, *canonical_source)) {
++    return native_id;
++  }
++
++  std::string source_utf8;
++  canonical_source->toUTF8String(source_utf8);
++  const auto cohort = std::find_if(
++      kCohortTable.begin(), kCohortTable.end(),
++      [&source_utf8](const auto& entry) { return entry.first == source_utf8; });
++  if (cohort == kCohortTable.end()) {
++    return native_id;
++  }
++
++  const String representative_id(cohort->second.data());
++  const std::optional<icu::UnicodeString> canonical_representative =
++      CanonicalSystemId(representative_id);
++  if (!canonical_representative) {
++    return native_id;
++  }
++
++  std::unique_ptr<icu::TimeZone> source_zone(
++      icu::TimeZone::createTimeZone(*canonical_source));
++  std::unique_ptr<icu::TimeZone> representative_zone(
++      icu::TimeZone::createTimeZone(*canonical_representative));
++  if (!source_zone || !representative_zone ||
++      *source_zone == icu::TimeZone::getUnknown() ||
++      *representative_zone == icu::TimeZone::getUnknown()) {
++    return native_id;
++  }
++  // Blink core compiles without C++ RTTI; ICU only returns BasicTimeZone
++  // subclasses for recognized system ids, and unknown zones are rejected
++  // above.
++  const auto* source_basic =
++      static_cast<const icu::BasicTimeZone*>(source_zone.get());
++  const auto* representative_basic =
++      static_cast<const icu::BasicTimeZone*>(representative_zone.get());
++
++  const UDate start_ms = validation_start.InMillisecondsFSinceUnixEpoch();
++  const UDate end_ms = validation_end.InMillisecondsFSinceUnixEpoch();
++
++  int32_t source_raw_offset = 0;
++  int32_t source_dst_offset = 0;
++  int32_t representative_raw_offset = 0;
++  int32_t representative_dst_offset = 0;
++  UErrorCode status = U_ZERO_ERROR;
++  source_basic->getOffset(start_ms, /*local=*/false, source_raw_offset,
++                          source_dst_offset, status);
++  if (U_FAILURE(status)) {
++    return native_id;
++  }
++  status = U_ZERO_ERROR;
++  representative_basic->getOffset(start_ms, /*local=*/false,
++                                  representative_raw_offset,
++                                  representative_dst_offset, status);
++  if (U_FAILURE(status) || source_raw_offset != representative_raw_offset ||
++      source_dst_offset != representative_dst_offset) {
++    return native_id;
++  }
++
++  status = U_ZERO_ERROR;
++  const UBool equivalent = source_basic->hasEquivalentTransitions(
++      *representative_basic, start_ms, end_ms, /*ignoreDstAmount=*/false,
++      status);
++  if (!equivalent || U_FAILURE(status)) {
++    return native_id;
++  }
++
++  return representative_id;
++#else
++  return native_id;
++#endif
++}
++
+ bool CanonicalEquals(const String& time_zone_a, const String& time_zone_b) {
+   if (time_zone_a == time_zone_b) {
+     return true;
+@@ -243,6 +471,26 @@
+ void TimeZoneController::OnTimeZoneChange(const String& timezone_id) {
+   DCHECK(IsMainThread());
  
 +#if BUILDFLAG(IS_LINUX)
-+  instance().host_timezone_id_ = kNormalizedTimezoneId;
-+#else
-   // Remember requested timezone id so we can set it when timezone
-   // override is removed.
-   instance().host_timezone_id_ = timezone_id;
++  if (base::FeatureList::IsEnabled(features::kHeliumNoise)) {
++    // Normalize before taking the lock: normalization runs ICU and must not
++    // happen while holding the controller lock.
++    const base::Time now = base::Time::Now();
++    const String normalized =
++        NormalizeHostTimezoneId(timezone_id, now, now + base::Days(3653));
++
++    base::AutoLock locker(instance().lock_);
++    // Remember the requested timezone id (normalized) so we can set it
++    // when timezone override is removed.
++    instance().host_timezone_id_ = normalized;
++
++    if (!HasTimeZoneOverride()) {
++      SetIcuTimeZoneAndNotifyV8(normalized);
++    }
++    return;
++  }
 +#endif
++
+   base::AutoLock locker(instance().lock_);
+ 
+   // Remember requested timezone id so we can set it when timezone
+@@ -250,7 +498,7 @@
+   instance().host_timezone_id_ = timezone_id;
  
    if (!HasTimeZoneOverride())
 -    SetIcuTimeZoneAndNotifyV8(timezone_id);
@@ -52,3 +302,452 @@
  }
  
  const String& TimeZoneController::GetHostTimezoneId() {
+--- a/third_party/blink/renderer/core/timezone/timezone_controller.h
++++ b/third_party/blink/renderer/core/timezone/timezone_controller.h
+@@ -8,6 +8,7 @@
+ #include <memory>
+ 
+ #include "base/synchronization/lock.h"
++#include "base/time/time.h"
+ #include "mojo/public/cpp/bindings/receiver.h"
+ #include "services/device/public/mojom/time_zone_monitor.mojom-blink.h"
+ #include "third_party/blink/renderer/core/core_export.h"
+@@ -87,6 +88,16 @@
+   static void ChangeTimeZoneOverride(const String&);
+   static bool SetIcuTimeZoneAndNotifyV8(const String& timezone_id);
+ 
++  // Returns the cohort representative for |native_id| when Helium Noise is
++  // enabled on Linux, or |native_id| itself otherwise or on any validation
++  // failure within [validation_start, validation_end].
++  static String NormalizeHostTimezoneId(const String& native_id,
++                                        base::Time validation_start,
++                                        base::Time validation_end);
++
++  // TimeZoneControllerTest exercises normalization and constructor state.
++  friend class TimeZoneControllerTest;
++
+   const String& GetHostTimezoneId();
+ 
+   // device::mojom::blink::TimeZoneMonitorClient:
+--- /dev/null
++++ b/third_party/blink/renderer/core/timezone/timezone_controller_test.cc
+@@ -0,0 +1,399 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "third_party/blink/renderer/core/timezone/timezone_controller.h"
++
++#include <array>
++#include <cstdint>
++#include <initializer_list>
++#include <memory>
++#include <string>
++#include <string_view>
++#include <utility>
++#include <vector>
++
++#include "base/memory/ptr_util.h"
++#include "base/test/icu_test_util.h"
++#include "base/test/scoped_feature_list.h"
++#include "build/build_config.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/common/features.h"
++#include "third_party/icu/source/i18n/unicode/basictz.h"
++#include "third_party/icu/source/i18n/unicode/timezone.h"
++#include "third_party/icu/source/i18n/unicode/tztrans.h"
++
++#if BUILDFLAG(IS_LINUX)
++
++namespace blink {
++namespace {
++
++constexpr auto kExpectedCohorts = std::to_array<std::pair<std::string_view,
++                                                          std::string_view>>({
++    {"America/New_York", "America/New_York"},
++    {"America/Toronto", "America/New_York"}, {"America/Iqaluit", "America/New_York"},
++    {"America/Port-au-Prince", "America/New_York"}, {"America/Grand_Turk", "America/New_York"},
++    {"America/Detroit", "America/New_York"}, {"America/Kentucky/Louisville", "America/New_York"},
++    {"America/Kentucky/Monticello", "America/New_York"}, {"America/Indiana/Indianapolis", "America/New_York"},
++    {"America/Indiana/Vincennes", "America/New_York"}, {"America/Indiana/Winamac", "America/New_York"},
++    {"America/Indiana/Marengo", "America/New_York"}, {"America/Indiana/Petersburg", "America/New_York"},
++    {"America/Indiana/Vevay", "America/New_York"},
++    {"America/Chicago", "America/Chicago"}, {"America/Winnipeg", "America/Chicago"},
++    {"America/Resolute", "America/Chicago"}, {"America/Rankin_Inlet", "America/Chicago"},
++    {"America/Matamoros", "America/Chicago"}, {"America/Ojinaga", "America/Chicago"},
++    {"America/Indiana/Tell_City", "America/Chicago"}, {"America/Indiana/Knox", "America/Chicago"},
++    {"America/Menominee", "America/Chicago"}, {"America/North_Dakota/Center", "America/Chicago"},
++    {"America/North_Dakota/New_Salem", "America/Chicago"}, {"America/North_Dakota/Beulah", "America/Chicago"},
++    {"America/Denver", "America/Denver"}, {"America/Cambridge_Bay", "America/Denver"},
++    {"America/Ciudad_Juarez", "America/Denver"}, {"America/Boise", "America/Denver"},
++    {"America/Los_Angeles", "America/Los_Angeles"}, {"America/Tijuana", "America/Los_Angeles"},
++    {"America/Anchorage", "America/Anchorage"}, {"America/Juneau", "America/Anchorage"},
++    {"America/Sitka", "America/Anchorage"}, {"America/Metlakatla", "America/Anchorage"},
++    {"America/Yakutat", "America/Anchorage"}, {"America/Nome", "America/Anchorage"},
++    {"America/Halifax", "America/Halifax"}, {"Atlantic/Bermuda", "America/Halifax"},
++    {"America/Glace_Bay", "America/Halifax"}, {"America/Moncton", "America/Halifax"},
++    {"America/Goose_Bay", "America/Halifax"}, {"America/Thule", "America/Halifax"},
++    {"Europe/Paris", "Europe/Paris"}, {"Europe/Andorra", "Europe/Paris"},
++    {"Europe/Tirane", "Europe/Paris"}, {"Europe/Vienna", "Europe/Paris"},
++    {"Europe/Brussels", "Europe/Paris"}, {"Europe/Zurich", "Europe/Paris"},
++    {"Europe/Prague", "Europe/Paris"}, {"Europe/Berlin", "Europe/Paris"},
++    {"Europe/Madrid", "Europe/Paris"}, {"Africa/Ceuta", "Europe/Paris"},
++    {"Europe/Gibraltar", "Europe/Paris"}, {"Europe/Budapest", "Europe/Paris"},
++    {"Europe/Rome", "Europe/Paris"}, {"Europe/Malta", "Europe/Paris"},
++    {"Europe/Warsaw", "Europe/Paris"}, {"Europe/Belgrade", "Europe/Paris"},
++    {"Europe/London", "Europe/London"}, {"Atlantic/Canary", "Europe/London"},
++    {"Atlantic/Faroe", "Europe/London"}, {"Europe/Lisbon", "Europe/London"},
++    {"Atlantic/Madeira", "Europe/London"},
++    {"Europe/Athens", "Europe/Athens"}, {"Europe/Sofia", "Europe/Athens"},
++    {"Asia/Nicosia", "Europe/Athens"}, {"Asia/Famagusta", "Europe/Athens"},
++    {"Europe/Tallinn", "Europe/Athens"}, {"Europe/Helsinki", "Europe/Athens"},
++    {"Europe/Vilnius", "Europe/Athens"}, {"Europe/Riga", "Europe/Athens"},
++    {"Europe/Chisinau", "Europe/Athens"}, {"Europe/Bucharest", "Europe/Athens"},
++    {"Europe/Kyiv", "Europe/Athens"},
++    {"Australia/Sydney", "Australia/Sydney"}, {"Antarctica/Macquarie", "Australia/Sydney"},
++    {"Australia/Hobart", "Australia/Sydney"}, {"Australia/Melbourne", "Australia/Sydney"},
++    {"Australia/Adelaide", "Australia/Adelaide"}, {"Australia/Broken_Hill", "Australia/Adelaide"},
++    {"Africa/Casablanca", "Africa/Casablanca"}, {"Africa/El_Aaiun", "Africa/Casablanca"},
++    {"America/Sao_Paulo", "America/Sao_Paulo"},
++    {"America/Argentina/Buenos_Aires", "America/Sao_Paulo"}, {"America/Argentina/Cordoba", "America/Sao_Paulo"},
++    {"America/Argentina/Mendoza", "America/Sao_Paulo"}, {"America/Fortaleza", "America/Sao_Paulo"},
++    {"America/Recife", "America/Sao_Paulo"}, {"America/Bahia", "America/Sao_Paulo"},
++    {"America/Asuncion", "America/Sao_Paulo"}, {"America/Montevideo", "America/Sao_Paulo"},
++    {"America/Cayenne", "America/Sao_Paulo"}, {"America/Paramaribo", "America/Sao_Paulo"},
++    {"America/Punta_Arenas", "America/Sao_Paulo"}, {"America/Coyhaique", "America/Sao_Paulo"},
++    {"Atlantic/Stanley", "America/Sao_Paulo"},
++    {"America/Bogota", "America/Bogota"}, {"America/Lima", "America/Bogota"},
++    {"America/Guayaquil", "America/Bogota"}, {"America/Panama", "America/Bogota"},
++    {"America/Cancun", "America/Bogota"}, {"America/Jamaica", "America/Bogota"},
++    {"America/Santo_Domingo", "America/Santo_Domingo"}, {"America/Caracas", "America/Santo_Domingo"},
++    {"America/La_Paz", "America/Santo_Domingo"}, {"America/Manaus", "America/Santo_Domingo"},
++    {"America/Cuiaba", "America/Santo_Domingo"}, {"America/Puerto_Rico", "America/Santo_Domingo"},
++    {"America/Guyana", "America/Santo_Domingo"}, {"America/Martinique", "America/Santo_Domingo"},
++    {"America/Barbados", "America/Santo_Domingo"},
++    {"America/Mexico_City", "America/Mexico_City"}, {"America/Merida", "America/Mexico_City"},
++    {"America/Monterrey", "America/Mexico_City"}, {"America/Chihuahua", "America/Mexico_City"},
++    {"America/Bahia_Banderas", "America/Mexico_City"},
++    {"America/Phoenix", "America/Phoenix"}, {"America/Hermosillo", "America/Phoenix"},
++    {"America/Mazatlan", "America/Phoenix"},
++    {"Africa/Abidjan", "Africa/Abidjan"}, {"Africa/Bissau", "Africa/Abidjan"},
++    {"Africa/Monrovia", "Africa/Abidjan"}, {"Africa/Sao_Tome", "Africa/Abidjan"},
++    {"Africa/Lagos", "Africa/Lagos"}, {"Africa/Algiers", "Africa/Lagos"},
++    {"Africa/Tunis", "Africa/Lagos"}, {"Africa/Ndjamena", "Africa/Lagos"},
++    {"Africa/Johannesburg", "Africa/Johannesburg"}, {"Africa/Maputo", "Africa/Johannesburg"},
++    {"Africa/Windhoek", "Africa/Johannesburg"}, {"Africa/Tripoli", "Africa/Johannesburg"},
++    {"Africa/Khartoum", "Africa/Johannesburg"}, {"Africa/Juba", "Africa/Johannesburg"},
++    {"Asia/Dubai", "Asia/Dubai"}, {"Asia/Baku", "Asia/Dubai"},
++    {"Asia/Tbilisi", "Asia/Dubai"}, {"Asia/Yerevan", "Asia/Dubai"},
++    {"Indian/Mauritius", "Asia/Dubai"},
++    {"Asia/Karachi", "Asia/Karachi"}, {"Asia/Tashkent", "Asia/Karachi"},
++    {"Asia/Samarkand", "Asia/Karachi"}, {"Asia/Ashgabat", "Asia/Karachi"},
++    {"Asia/Dushanbe", "Asia/Karachi"}, {"Asia/Yekaterinburg", "Asia/Karachi"},
++    {"Asia/Almaty", "Asia/Karachi"}, {"Indian/Maldives", "Asia/Karachi"},
++    {"Asia/Kolkata", "Asia/Kolkata"}, {"Asia/Colombo", "Asia/Kolkata"},
++    {"Asia/Jakarta", "Asia/Jakarta"}, {"Asia/Bangkok", "Asia/Jakarta"},
++    {"Asia/Ho_Chi_Minh", "Asia/Jakarta"}, {"Asia/Novosibirsk", "Asia/Jakarta"},
++    {"Asia/Krasnoyarsk", "Asia/Jakarta"},
++    {"Asia/Shanghai", "Asia/Shanghai"}, {"Asia/Hong_Kong", "Asia/Shanghai"},
++    {"Asia/Singapore", "Asia/Shanghai"}, {"Asia/Taipei", "Asia/Shanghai"},
++    {"Asia/Manila", "Asia/Shanghai"}, {"Asia/Macau", "Asia/Shanghai"},
++    {"Australia/Perth", "Asia/Shanghai"}, {"Asia/Ulaanbaatar", "Asia/Shanghai"},
++    {"Asia/Tokyo", "Asia/Tokyo"}, {"Asia/Seoul", "Asia/Tokyo"},
++    {"Asia/Pyongyang", "Asia/Tokyo"},
++    {"Australia/Brisbane", "Australia/Brisbane"}, {"Australia/Lindeman", "Australia/Brisbane"},
++});
++
++// Fixed deterministic validation window: [2026-08-24T00:00:00Z,
++// 2076-08-24T00:00:00Z].
++constexpr int64_t kStartMs = 1787529600000;
++constexpr int64_t kEndMs = 3365452800000;
++
++const char* TZDataVersion() {
++  UErrorCode status = U_ZERO_ERROR;
++  return icu::TimeZone::getTZDataVersion(status);
++}
++
++std::string CurrentIcuZoneId() {
++  std::unique_ptr<icu::TimeZone> zone(icu::TimeZone::createDefault());
++  icu::UnicodeString unicode_id;
++  zone->getID(unicode_id);
++  std::string utf8;
++  unicode_id.toUTF8String(utf8);
++  return utf8;
++}
++
++std::unique_ptr<icu::BasicTimeZone> CreateBasicZone(const char* zone_id) {
++  std::unique_ptr<icu::TimeZone> zone(icu::TimeZone::createTimeZone(
++      icu::UnicodeString(zone_id, -1, US_INV)));
++  if (!zone || *zone == icu::TimeZone::getUnknown()) {
++    return nullptr;
++  }
++  // Every ICU zone returned for a recognized id derives from
++  // BasicTimeZone; Blink core compiles without C++ RTTI.
++  return std::unique_ptr<icu::BasicTimeZone>(
++      static_cast<icu::BasicTimeZone*>(zone.release()));
++}
++
++}  // namespace
++
++// The fixture must live directly in namespace blink so that
++// TimeZoneController's friend declaration names this class.
++class TimeZoneControllerTest : public testing::Test {
++ public:
++  // Friendship does not extend into TEST_F subclasses, so all access to
++  // TimeZoneController internals goes through these members.
++  void EnableMasterNoise() {
++    InitFeaturesFromCommandLine("HeliumNoise");
++  }
++
++  void InitFeaturesFromCommandLine(
++      std::string_view enable_features,
++      std::string_view disable_features = std::string_view()) {
++    feature_lists_.push_back(std::make_unique<base::test::ScopedFeatureList>());
++    feature_lists_.back()->InitFromCommandLine(enable_features,
++                                               disable_features);
++  }
++
++  static String NormalizeId(const char* native_id) {
++    return TimeZoneController::NormalizeHostTimezoneId(
++        String(native_id),
++        base::Time::FromMillisecondsSinceUnixEpoch(kStartMs),
++        base::Time::FromMillisecondsSinceUnixEpoch(kEndMs));
++  }
++
++  static std::unique_ptr<TimeZoneController> MakeController() {
++    return base::WrapUnique(new TimeZoneController());
++  }
++
++  static std::string StoredHostZoneId(TimeZoneController& controller) {
++    base::AutoLock locker(controller.lock_);
++    return controller.host_timezone_id_.Ascii();
++  }
++
++  static bool StoredHostZoneIdIsNull(TimeZoneController& controller) {
++    base::AutoLock locker(controller.lock_);
++    return controller.host_timezone_id_.IsNull();
++  }
++
++  static std::string SingletonStoredHostZoneId() {
++    return StoredHostZoneId(TimeZoneController::instance());
++  }
++
++ private:
++  void SetUp() override {
++    restore_timezone_ =
++        std::make_unique<base::test::ScopedRestoreDefaultTimezone>(
++            "America/Los_Angeles");
++  }
++  void TearDown() override { restore_timezone_.reset(); }
++
++  std::vector<std::unique_ptr<base::test::ScopedFeatureList>> feature_lists_;
++  std::unique_ptr<base::test::ScopedRestoreDefaultTimezone> restore_timezone_;
++};
++
++namespace {
++
++void ExpectEqualOffsetsAt(const icu::BasicTimeZone& source,
++                          const icu::BasicTimeZone& representative,
++                          double when_ms,
++                          std::string_view source_id,
++                          std::string_view representative_id) {
++  int32_t source_raw_offset = 0;
++  int32_t source_dst_offset = 0;
++  int32_t representative_raw_offset = 0;
++  int32_t representative_dst_offset = 0;
++  UErrorCode source_status = U_ZERO_ERROR;
++  UErrorCode representative_status = U_ZERO_ERROR;
++  source.getOffset(when_ms, /*local=*/false, source_raw_offset,
++                   source_dst_offset, source_status);
++  representative.getOffset(when_ms, /*local=*/false, representative_raw_offset,
++                           representative_dst_offset, representative_status);
++  EXPECT_TRUE(U_SUCCESS(source_status));
++  EXPECT_TRUE(U_SUCCESS(representative_status));
++  EXPECT_EQ(source_raw_offset, representative_raw_offset)
++      << source_id << " vs " << representative_id << " at " << when_ms
++      << " tzdata " << TZDataVersion();
++  EXPECT_EQ(source_dst_offset, representative_dst_offset)
++      << source_id << " vs " << representative_id << " at " << when_ms
++      << " tzdata " << TZDataVersion();
++  EXPECT_EQ(source_raw_offset + source_dst_offset,
++            representative_raw_offset + representative_dst_offset)
++      << source_id << " vs " << representative_id << " at " << when_ms
++      << " tzdata " << TZDataVersion();
++}
++
++TEST_F(TimeZoneControllerTest, CohortTableMapsEverySourceToItsRepresentative) {
++  EnableMasterNoise();
++  for (const auto& [source_id, representative_id] : kExpectedCohorts) {
++    SCOPED_TRACE(testing::Message()
++                 << source_id.data() << " -> " << representative_id.data()
++                 << " tzdata " << TZDataVersion());
++    EXPECT_EQ(NormalizeId(representative_id.data()),
++              NormalizeId(source_id.data()));
++  }
++}
++
++TEST_F(TimeZoneControllerTest, CohortMembersShareOffsetsAtFixedStart) {
++  for (const auto& [source_id, representative_id] : kExpectedCohorts) {
++    SCOPED_TRACE(testing::Message()
++                 << source_id.data() << " -> " << representative_id.data()
++                 << " tzdata " << TZDataVersion());
++    std::unique_ptr<icu::BasicTimeZone> source =
++        CreateBasicZone(source_id.data());
++    std::unique_ptr<icu::BasicTimeZone> representative =
++        CreateBasicZone(representative_id.data());
++    ASSERT_TRUE(source);
++    ASSERT_TRUE(representative);
++    ExpectEqualOffsetsAt(*source, *representative, kStartMs, source_id,
++                         representative_id);
++  }
++}
++
++TEST_F(TimeZoneControllerTest, CohortMembersHaveEquivalentTransitionsOver50Years) {
++  for (const auto& [source_id, representative_id] : kExpectedCohorts) {
++    SCOPED_TRACE(testing::Message()
++                 << source_id.data() << " -> " << representative_id.data()
++                 << " tzdata " << TZDataVersion());
++    std::unique_ptr<icu::BasicTimeZone> source =
++        CreateBasicZone(source_id.data());
++    std::unique_ptr<icu::BasicTimeZone> representative =
++        CreateBasicZone(representative_id.data());
++    ASSERT_TRUE(source);
++    ASSERT_TRUE(representative);
++    UErrorCode status = U_ZERO_ERROR;
++    const UBool equivalent = source->hasEquivalentTransitions(
++        *representative, kStartMs, kEndMs, /*ignoreDstAmount=*/false, status);
++    EXPECT_TRUE(equivalent);
++    EXPECT_TRUE(U_SUCCESS(status));
++  }
++}
++
++TEST_F(TimeZoneControllerTest, CohortMembersMatchTransitionBoundaries) {
++  for (const auto& [source_id, representative_id] : kExpectedCohorts) {
++    SCOPED_TRACE(testing::Message()
++                 << source_id.data() << " -> " << representative_id.data()
++                 << " tzdata " << TZDataVersion());
++    std::unique_ptr<icu::BasicTimeZone> source =
++        CreateBasicZone(source_id.data());
++    std::unique_ptr<icu::BasicTimeZone> representative =
++        CreateBasicZone(representative_id.data());
++    ASSERT_TRUE(source);
++    ASSERT_TRUE(representative);
++    UDate cursor = kStartMs;
++    for (int transitions_seen = 0; transitions_seen < 500;
++         ++transitions_seen) {
++      icu::TimeZoneTransition source_transition;
++      icu::TimeZoneTransition representative_transition;
++      const UBool source_has = source->getNextTransition(
++          cursor, /*inclusive=*/false, source_transition);
++      const UBool representative_has = representative->getNextTransition(
++          cursor, /*inclusive=*/false, representative_transition);
++      ASSERT_EQ(source_has != 0, representative_has != 0);
++      if (!source_has) {
++        break;
++      }
++      ASSERT_EQ(source_transition.getTime(),
++                representative_transition.getTime());
++      ExpectEqualOffsetsAt(*source, *representative,
++                           source_transition.getTime() - 1.0, source_id,
++                           representative_id);
++      ExpectEqualOffsetsAt(*source, *representative,
++                           source_transition.getTime(), source_id,
++                           representative_id);
++      cursor = source_transition.getTime();
++    }
++  }
++}
++
++TEST_F(TimeZoneControllerTest, LegacyAliasesMapToCanonicalRepresentatives) {
++  EnableMasterNoise();
++  EXPECT_EQ(NormalizeId("America/New_York"), NormalizeId("US/Eastern"));
++  EXPECT_EQ(NormalizeId("America/New_York"), NormalizeId("Canada/Eastern"));
++  EXPECT_EQ(NormalizeId("Asia/Kolkata"), NormalizeId("Asia/Calcutta"));
++  EXPECT_EQ(NormalizeId("Europe/Kyiv"), NormalizeId("Europe/Kiev"));
++}
++
++TEST_F(TimeZoneControllerTest, ExcludedAndUnmappedIdsRemainNative) {
++  EnableMasterNoise();
++  for (const char* native_id :
++       {"UTC", "GMT", "Etc/GMT+5", "GMT+05:30", "PST8PDT", "Not/AZone",
++        "Asia/Kathmandu", "Australia/Lord_Howe", "Europe/Dublin",
++        "America/St_Johns"}) {
++    SCOPED_TRACE(testing::Message() << native_id << " tzdata "
++                                    << TZDataVersion());
++    EXPECT_EQ(String(native_id), NormalizeId(native_id));
++  }
++}
++
++TEST_F(TimeZoneControllerTest, DisabledMasterPreservesLazyConstructorState) {
++  InitFeaturesFromCommandLine(/*enable_features=*/"LazyBlinkTimezoneInit",
++                              /*disable_features=*/"HeliumNoise");
++  std::unique_ptr<TimeZoneController> controller = MakeController();
++  ASSERT_TRUE(controller);
++  EXPECT_TRUE(StoredHostZoneIdIsNull(*controller));
++  EXPECT_EQ("America/Los_Angeles", CurrentIcuZoneId());
++}
++
++TEST_F(TimeZoneControllerTest, EnabledLinuxResolvesHostZoneEagerlyDespiteLazyInit) {
++  InitFeaturesFromCommandLine("HeliumNoise,LazyBlinkTimezoneInit");
++  std::unique_ptr<TimeZoneController> controller = MakeController();
++  ASSERT_TRUE(controller);
++  EXPECT_EQ("America/Los_Angeles", StoredHostZoneId(*controller));
++  EXPECT_EQ("America/Los_Angeles", CurrentIcuZoneId());
++}
++
++TEST_F(TimeZoneControllerTest, ChangeTimeZoneForTestingAppliesNormalization) {
++  EnableMasterNoise();
++  TimeZoneController::ChangeTimeZoneForTesting("America/Toronto");
++  EXPECT_EQ("America/New_York", CurrentIcuZoneId());
++  EXPECT_EQ("America/New_York", SingletonStoredHostZoneId());
++}
++
++TEST_F(TimeZoneControllerTest, OverrideLifecycleStaysExactAndRestoresNormalizedHost) {
++  EnableMasterNoise();
++  TimeZoneController::ChangeTimeZoneForTesting("Europe/Paris");
++
++  TimeZoneController::TimeZoneOverrideResult result =
++      TimeZoneController::SetTimeZoneOverride("Asia/Tokyo");
++  ASSERT_EQ(TimeZoneController::TimeZoneOverrideStatus::kSuccess,
++            result.status);
++  ASSERT_TRUE(result.handle);
++  EXPECT_EQ("Asia/Tokyo", CurrentIcuZoneId());
++
++  // A host timezone change is normalized and stored, but the exact override
++  // keeps suppressing host application.
++  TimeZoneController::ChangeTimeZoneForTesting("Europe/Andorra");
++  EXPECT_EQ("Asia/Tokyo", CurrentIcuZoneId());
++  EXPECT_EQ("Europe/Paris", SingletonStoredHostZoneId());
++
++  result.handle->change("Asia/Seoul");
++  EXPECT_EQ("Asia/Seoul", CurrentIcuZoneId());
++
++  result.handle.reset();
++  EXPECT_EQ("Europe/Paris", CurrentIcuZoneId());
++  EXPECT_EQ("Europe/Paris", SingletonStoredHostZoneId());
++}
++
++}  // namespace
++}  // namespace blink
++
++#endif  // BUILDFLAG(IS_LINUX)
+--- a/third_party/blink/renderer/core/timezone/build.gni
++++ b/third_party/blink/renderer/core/timezone/build.gni
+@@ -6,3 +6,7 @@
+   "timezone_controller.cc",
+   "timezone_controller.h",
+ ]
++
++blink_core_tests_timezone = [
++  "timezone_controller_test.cc",
++]
+--- a/third_party/blink/renderer/core/BUILD.gn
++++ b/third_party/blink/renderer/core/BUILD.gn
+@@ -1506,6 +1506,7 @@
+   sources += rebase_path(blink_core_tests_display_lock, "", "display_lock")
+   sources +=
+       rebase_path(blink_core_tests_view_transition, "", "view_transition")
++  sources += rebase_path(blink_core_tests_timezone, "", "timezone")
+   sources += rebase_path(blink_core_tests_dom, "", "dom")
+   sources += rebase_path(blink_core_tests_editing, "", "editing")
+   sources += rebase_path(blink_core_tests_events, "", "events")
