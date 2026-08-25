@@ -1,24 +1,33 @@
 --- a/chrome/browser/helium_flag_entries.h
 +++ b/chrome/browser/helium_flag_entries.h
-@@ -29,5 +29,4 @@
+@@ -44,9 +44,8 @@
+      "fingerprinting. Helium flag.",
+      kOsAll, FEATURE_VALUE_TYPE(blink::features::kHeliumNoiseAudio)},
      {helium::kHeliumNoiseCpuCoresCommandLine,
 -     "[Helium Noise] Randomize number of CPU cores",
 -     "Randomizes the number of cores returned by "
 -     "`navigator.hardwareConcurrency` in a reasonable range. Helium flag.",
-+     "[Helium Noise] Normalize number of CPU cores",
-+     "Reports 8 cores through `navigator.hardwareConcurrency`. Helium flag.",
++     "[Helium Noise] Normalize CPU and device memory profile",
++     "Reports a capability-safe CPU and device-memory profile. Helium flag.",
       kOsAll, FEATURE_VALUE_TYPE(blink::features::kHeliumNoiseCpuCores)},
+     // core/network
+     {helium::kDisableEchCommandLine, "Disable Encrypted Client Hello (ECH)",
 --- a/third_party/blink/renderer/core/execution_context/navigator_base.cc
 +++ b/third_party/blink/renderer/core/execution_context/navigator_base.cc
-@@ -9,7 +9,6 @@
+@@ -4,8 +4,12 @@
+ 
+ #include "third_party/blink/renderer/core/execution_context/navigator_base.h"
+ 
++#include <vector>
++
+ #include "base/feature_list.h"
+ #include "build/build_config.h"
++#include "third_party/blink/public/common/device_memory/approximated_device_memory.h"
++#include "third_party/blink/public/common/device_memory/hardware_profile.h"
  #include "third_party/blink/public/common/features.h"
  #include "third_party/blink/renderer/core/execution_context/execution_context.h"
  #include "third_party/blink/renderer/core/frame/navigator_concurrent_hardware.h"
--#include "third_party/blink/renderer/core/helium_noise/helium_noise_hash.h"
- #include "third_party/blink/renderer/core/probe/core_probes.h"
- #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
- #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
-@@ -42,50 +41,13 @@ String GetReducedNavigatorPlatform() {
+@@ -42,54 +46,39 @@
  #endif
  }
  
@@ -50,16 +59,22 @@
 -
 -  return candidates;
 -}
--
++}  // namespace
+ 
 -unsigned MaybeNoiseCoreCount(ExecutionContext* execution_context, unsigned n) {
 -  if (!base::FeatureList::IsEnabled(blink::features::kHeliumNoiseCpuCores) ||
--      !execution_context ||
--      !execution_context->GetHeliumNoiseTokens().contains(
--          HeliumNoiseFeature::kHardware)) {
-+unsigned MaybeNormalizeCoreCount(unsigned n) {
-+  if (!base::FeatureList::IsEnabled(blink::features::kHeliumNoise) ||
-+      !base::FeatureList::IsEnabled(blink::features::kHeliumNoiseCpuCores)) {
-     return n;
++// External linkage only so navigator_base_test.cc can exercise the same
++// translation-unit behavior; it is intentionally not declared in a header.
++unsigned MaybeNormalizeHardwareConcurrency(ExecutionContext* execution_context,
++                                           unsigned hardware_concurrency) {
++#if BUILDFLAG(IS_LINUX)
++  if (!base::FeatureList::IsEnabled(features::kHeliumNoise) ||
++      !base::FeatureList::IsEnabled(features::kHeliumNoiseCpuCores) ||
+       !execution_context ||
+       !execution_context->GetHeliumNoiseTokens().contains(
+           HeliumNoiseFeature::kHardware)) {
+-    return n;
++    return hardware_concurrency;
    }
  
 -  auto token_hash =
@@ -69,16 +84,167 @@
 -
 -  auto values = PossibleValuesForCoreCount(n);
 -  return values[token_hash.GetValueBelow(values.size())];
-+  return 8;
++  const int device_memory_gb = static_cast<int>(
++      ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
++  const std::vector<unsigned> candidates =
++      GetHardwareConcurrencyCandidates(hardware_concurrency,
++                                       device_memory_gb);
++  if (candidates.empty())
++    return hardware_concurrency;
++
++  HeliumNoiseHash token_hash(execution_context->GetHeliumNoiseTokens().at(
++      HeliumNoiseFeature::kHardware));
++  token_hash.Update(hardware_concurrency);
++  token_hash.Update(device_memory_gb);
++  return candidates[token_hash.GetValueBelow(candidates.size())];
++#else
++  return hardware_concurrency;
++#endif
  }
  
- }  // namespace
-@@ -124,7 +86,7 @@ unsigned int NavigatorBase::hardwareConcurrency() const {
+-}  // namespace
+-
+ NavigatorBase::NavigatorBase(ExecutionContext* context)
+     : NavigatorLanguage(context), ExecutionContextClient(context) {}
+ 
+@@ -124,7 +113,8 @@
  
    probe::ApplyHardwareConcurrencyOverride(
        probe::ToCoreProbeSink(GetExecutionContext()), hardware_concurrency);
 -  return MaybeNoiseCoreCount(GetExecutionContext(), hardware_concurrency);
-+  return MaybeNormalizeCoreCount(hardware_concurrency);
++  return MaybeNormalizeHardwareConcurrency(GetExecutionContext(),
++                                           hardware_concurrency);
  }
  
  ExecutionContext* NavigatorBase::GetUAExecutionContext() const {
+--- a/third_party/blink/renderer/core/execution_context/build.gni
++++ b/third_party/blink/renderer/core/execution_context/build.gni
+@@ -27,5 +27,7 @@
+   "window_agent_factory.h",
+ ]
+ 
+-blink_core_tests_execution_context =
+-    [ "execution_context_lifecycle_state_observer_test.cc" ]
++blink_core_tests_execution_context = [
++  "execution_context_lifecycle_state_observer_test.cc",
++  "navigator_base_test.cc",
++]
+--- /dev/null
++++ b/third_party/blink/renderer/core/execution_context/navigator_base_test.cc
+@@ -0,0 +1,116 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include <cstdint>
++#include <memory>
++#include <set>
++#include <vector>
++
++#include "base/test/scoped_feature_list.h"
++#include "testing/gmock/include/gmock/gmock.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/common/device_memory/approximated_device_memory.h"
++#include "third_party/blink/public/common/features.h"
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
++#include "third_party/blink/renderer/core/dom/document.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/core/testing/page_test_base.h"
++#include "ui/gfx/geometry/size.h"
++
++namespace blink {
++
++unsigned MaybeNormalizeHardwareConcurrency(ExecutionContext*, unsigned);
++
++namespace {
++
++class NavigatorBaseTest : public PageTestBase {
++ public:
++  void SetUp() override { PageTestBase::SetUp(gfx::Size()); }
++
++  void EnableNoiseFeatures() {
++    InitFeatures({features::kHeliumNoise, features::kHeliumNoiseCpuCores}, {});
++  }
++
++  void DisableMasterFeature() { InitFeatures({}, {features::kHeliumNoise}); }
++
++  void EnableMasterDisableCpuFeature() {
++    InitFeatures({features::kHeliumNoise}, {features::kHeliumNoiseCpuCores});
++  }
++
++  void SetProfileMemory(unsigned logical_processors, int64_t memory_mb) {
++    ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(
++        memory_mb, logical_processors);
++  }
++
++  void SetHardwareToken(uint64_t token) {
++    Context()->SetHeliumNoiseTokens(
++        {{HeliumNoiseFeature::kHardware, HeliumNoiseToken(token)}});
++  }
++
++  ExecutionContext* Context() {
++    ExecutionContext* context = GetDocument().GetExecutionContext();
++    EXPECT_TRUE(context);
++    return context;
++  }
++
++ private:
++  // A live ScopedFeatureList must never be reinitialized, so every feature
++  // state gets its own instance that stays alive for the test.
++  void InitFeatures(std::initializer_list<base::test::FeatureRef> enabled,
++                    std::initializer_list<base::test::FeatureRef> disabled) {
++    auto scoped_feature_list =
++        std::make_unique<base::test::ScopedFeatureList>();
++    scoped_feature_list->InitWithFeatures(enabled, disabled);
++    feature_lists_.push_back(std::move(scoped_feature_list));
++  }
++
++  std::vector<std::unique_ptr<base::test::ScopedFeatureList>> feature_lists_;
++};
++
++TEST_F(NavigatorBaseTest, MissingContextOrHardwareTokenFailsOpen) {
++  EnableNoiseFeatures();
++  SetProfileMemory(8, 8192);
++  EXPECT_EQ(8u, MaybeNormalizeHardwareConcurrency(nullptr, 8));
++  EXPECT_EQ(8u, MaybeNormalizeHardwareConcurrency(Context(), 8));
++}
++
++TEST_F(NavigatorBaseTest, DisabledFeaturesFailOpen) {
++  SetProfileMemory(8, 8192);
++  SetHardwareToken(1);
++  DisableMasterFeature();
++  EXPECT_EQ(8u, MaybeNormalizeHardwareConcurrency(Context(), 8));
++  EnableMasterDisableCpuFeature();
++  EXPECT_EQ(8u, MaybeNormalizeHardwareConcurrency(Context(), 8));
++}
++
++TEST_F(NavigatorBaseTest, TokenSelectionIsDeterministicAndCapabilitySafe) {
++  EnableNoiseFeatures();
++  SetProfileMemory(8, 8192);
++  SetHardwareToken(7);
++  const unsigned first = MaybeNormalizeHardwareConcurrency(Context(), 8);
++  EXPECT_EQ(first, MaybeNormalizeHardwareConcurrency(Context(), 8));
++  EXPECT_THAT(first, testing::AnyOf(4u, 8u));
++  EXPECT_EQ(4u, MaybeNormalizeHardwareConcurrency(Context(), 6));
++}
++
++TEST_F(NavigatorBaseTest, EligibleTokensCanSelectDifferentCandidates) {
++  EnableNoiseFeatures();
++  SetProfileMemory(8, 8192);
++  std::set<unsigned> values;
++  for (uint64_t token = 0; token < 256; ++token) {
++    SetHardwareToken(token);
++    values.insert(MaybeNormalizeHardwareConcurrency(Context(), 8));
++  }
++  EXPECT_THAT(values, testing::UnorderedElementsAre(4u, 8u));
++}
++
++TEST_F(NavigatorBaseTest, UnsupportedProfileFailsOpen) {
++  EnableNoiseFeatures();
++  SetProfileMemory(1, 16384);
++  SetHardwareToken(1);
++  EXPECT_EQ(1u, MaybeNormalizeHardwareConcurrency(Context(), 1));
++}
++
++}  // namespace
++}  // namespace blink
