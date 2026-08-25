@@ -1,25 +1,367 @@
+--- a/third_party/blink/public/common/BUILD.gn
++++ b/third_party/blink/public/common/BUILD.gn
+@@ -140,6 +140,7 @@ source_set("headers") {
+     "css/scripting.h",
+     "custom_handlers/protocol_handler_utils.h",
+     "device_memory/approximated_device_memory.h",
++    "device_memory/hardware_profile.h",
+     "dom/dom_node_id.h",
+     "dom_storage/session_storage_namespace_id.h",
+     "features.h",
+--- a/third_party/blink/common/BUILD.gn
++++ b/third_party/blink/common/BUILD.gn
+@@ -141,6 +141,7 @@ component("blink_common") {
+     "crash_helpers.cc",
+     "crash_helpers.h",
+     "custom_handlers/protocol_handler_utils.cc",
++    "device_memory/hardware_profile.cc",
+     "device_memory/approximated_device_memory.cc",
+     "dom_storage/session_storage_namespace_id.cc",
+     "features.cc",
+@@ -390,6 +391,7 @@ source_set("common_unittests_sources") {
+     "client_hints/enabled_client_hints_unittest.cc",
+     "custom_handlers/protocol_handler_utils_unittest.cc",
+     "device_memory/approximated_device_memory_unittest.cc",
++    "device_memory/hardware_profile_unittest.cc",
+     "frame/delegated_capability_request_token_unittest.cc",
+     "frame/user_activation_state_unittest.cc",
+     "indexeddb/indexed_db_default_mojom_traits_unittest.cc",
+--- /dev/null
++++ b/third_party/blink/public/common/device_memory/hardware_profile.h
+@@ -0,0 +1,27 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef THIRD_PARTY_BLINK_PUBLIC_COMMON_DEVICE_MEMORY_HARDWARE_PROFILE_H_
++#define THIRD_PARTY_BLINK_PUBLIC_COMMON_DEVICE_MEMORY_HARDWARE_PROFILE_H_
++
++#include <stdint.h>
++
++#include <optional>
++#include <vector>
++
++#include "third_party/blink/public/common/common_export.h"
++
++namespace blink {
++
++BLINK_COMMON_EXPORT std::optional<int> SelectDeviceMemoryProfile(
++    unsigned logical_processors,
++    int64_t physical_memory_mb);
++
++BLINK_COMMON_EXPORT std::vector<unsigned> GetHardwareConcurrencyCandidates(
++    unsigned logical_processors,
++    int device_memory_gb);
++
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_PUBLIC_COMMON_DEVICE_MEMORY_HARDWARE_PROFILE_H_
+--- /dev/null
++++ b/third_party/blink/common/device_memory/hardware_profile.cc
+@@ -0,0 +1,56 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "third_party/blink/public/common/device_memory/hardware_profile.h"
++
++#include <array>
++
++namespace blink {
++namespace {
++
++struct HardwareProfile {
++  unsigned logical_processors;
++  int device_memory_gb;
++};
++
++constexpr std::array kHardwareProfiles{
++    HardwareProfile{2, 2},
++    HardwareProfile{2, 4},
++    HardwareProfile{4, 4},
++    HardwareProfile{4, 8},
++    HardwareProfile{8, 8},
++    HardwareProfile{8, 16},
++};
++
++}  // namespace
++
++std::optional<int> SelectDeviceMemoryProfile(unsigned logical_processors,
++                                              int64_t physical_memory_mb) {
++  std::optional<int> selected_memory;
++  for (const HardwareProfile& profile : kHardwareProfiles) {
++    if (profile.logical_processors <= logical_processors &&
++        static_cast<int64_t>(profile.device_memory_gb) * 1024 <=
++            physical_memory_mb) {
++      selected_memory = profile.device_memory_gb;
++    }
++  }
++  return selected_memory;
++}
++
++std::vector<unsigned> GetHardwareConcurrencyCandidates(
++    unsigned logical_processors,
++    int device_memory_gb) {
++  std::vector<unsigned> candidates;
++  for (const HardwareProfile& profile : kHardwareProfiles) {
++    if (profile.device_memory_gb == device_memory_gb &&
++        profile.logical_processors <= logical_processors &&
++        (candidates.empty() ||
++         candidates.back() != profile.logical_processors)) {
++      candidates.push_back(profile.logical_processors);
++    }
++  }
++  return candidates;
++}
++
++}  // namespace blink
+--- /dev/null
++++ b/third_party/blink/common/device_memory/hardware_profile_unittest.cc
+@@ -0,0 +1,76 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "third_party/blink/public/common/device_memory/hardware_profile.h"
++
++#include <algorithm>
++#include <array>
++#include <optional>
++#include <tuple>
++#include <utility>
++#include <vector>
++
++#include "testing/gmock/include/gmock/gmock.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace blink {
++namespace {
++
++using testing::ElementsAre;
++
++TEST(HardwareProfileTest, SelectsHighestCapabilitySafeMemoryTier) {
++  constexpr std::array cases{
++      std::tuple{2u, 2048, std::optional<int>(2)},
++      std::tuple{2u, 8192, std::optional<int>(4)},
++      std::tuple{4u, 16384, std::optional<int>(8)},
++      std::tuple{8u, 8192, std::optional<int>(8)},
++      std::tuple{8u, 16384, std::optional<int>(16)},
++      std::tuple{64u, 131072, std::optional<int>(16)},
++      std::tuple{1u, 16384, std::optional<int>{}},
++      std::tuple{8u, 2047, std::optional<int>{}},
++      std::tuple{3u, 4095, std::optional<int>(2)},
++      std::tuple{6u, 12288, std::optional<int>(8)},
++  };
++  for (const auto& [cores, memory_mb, expected] : cases) {
++    EXPECT_EQ(expected, SelectDeviceMemoryProfile(cores, memory_mb))
++        << "cores=" << cores << ", memory_mb=" << memory_mb;
++  }
++}
++
++TEST(HardwareProfileTest, ReturnsStableCompatibleCoreCandidates) {
++  EXPECT_THAT(GetHardwareConcurrencyCandidates(2, 2), ElementsAre(2));
++  EXPECT_THAT(GetHardwareConcurrencyCandidates(2, 4), ElementsAre(2));
++  EXPECT_THAT(GetHardwareConcurrencyCandidates(4, 4), ElementsAre(2, 4));
++  EXPECT_THAT(GetHardwareConcurrencyCandidates(4, 8), ElementsAre(4));
++  EXPECT_THAT(GetHardwareConcurrencyCandidates(8, 8), ElementsAre(4, 8));
++  EXPECT_THAT(GetHardwareConcurrencyCandidates(8, 16), ElementsAre(8));
++  EXPECT_TRUE(GetHardwareConcurrencyCandidates(1, 2).empty());
++  EXPECT_TRUE(GetHardwareConcurrencyCandidates(8, 32).empty());
++  EXPECT_TRUE(GetHardwareConcurrencyCandidates(0, 8).empty());
++}
++
++TEST(HardwareProfileTest, EveryReturnedPairIsApprovedAndCapabilitySafe) {
++  constexpr std::array approved{
++      std::pair{2u, 2}, std::pair{2u, 4}, std::pair{4u, 4},
++      std::pair{4u, 8}, std::pair{8u, 8}, std::pair{8u, 16},
++  };
++  for (unsigned actual_cores = 1; actual_cores <= 32; ++actual_cores) {
++    for (int64_t memory_mb = 1024; memory_mb <= 32768; memory_mb += 1024) {
++      const std::optional<int> memory =
++          SelectDeviceMemoryProfile(actual_cores, memory_mb);
++      if (!memory)
++        continue;
++      EXPECT_LE(static_cast<int64_t>(*memory) * 1024, memory_mb);
++      for (unsigned core :
++           GetHardwareConcurrencyCandidates(actual_cores, *memory)) {
++        EXPECT_LE(core, actual_cores);
++        EXPECT_NE(std::ranges::find(approved, std::pair{core, *memory}),
++                  approved.end());
++      }
++    }
++  }
++}
++
++}  // namespace
++}  // namespace blink
+--- a/third_party/blink/public/common/device_memory/approximated_device_memory.h
++++ b/third_party/blink/public/common/device_memory/approximated_device_memory.h
+@@ -24,9 +24,13 @@ class ApproximatedDeviceMemory {
+ 
+   // Override the value of the physical memory for testing.
+   static void BLINK_COMMON_EXPORT SetPhysicalMemoryMBForTesting(int64_t);
++  static void BLINK_COMMON_EXPORT SetPhysicalMemoryMBForTesting(
++      int64_t physical_memory_mb,
++      unsigned logical_processors);
+ 
+  private:
+-  static void CalculateAndSetApproximatedDeviceMemory();
++  static void CalculateAndSetApproximatedDeviceMemory(
++      unsigned logical_processors);
+ 
+   static float approximated_device_memory_gb_;
+   static int64_t physical_memory_mb_;
 --- a/third_party/blink/common/device_memory/approximated_device_memory.cc
 +++ b/third_party/blink/common/device_memory/approximated_device_memory.cc
-@@ -61,7 +61,10 @@ void ApproximatedDeviceMemory::Calculate
-   float kMinMemory = 2.0f;
-   float kMaxMemory = 32.0f;
+@@ -8,7 +8,9 @@
+ #include "base/check_op.h"
+ #include "base/feature_list.h"
+ #include "base/system/sys_info.h"
++#include "build/build_config.h"
++#include "third_party/blink/public/common/device_memory/hardware_profile.h"
+ #include "third_party/blink/public/common/features.h"
  
--#if BUILDFLAG(IS_ANDROID)
+ namespace blink {
+ 
+@@ -25 +27,2 @@ void ApproximatedDeviceMemory::Initialize() {
+-  CalculateAndSetApproximatedDeviceMemory();
++  CalculateAndSetApproximatedDeviceMemory(
++      ::base::SysInfo::NumberOfProcessors());
+@@ -31,7 +34,8 @@ float ApproximatedDeviceMemory::GetApproximatedDeviceMemory() {
+ }
+ 
+ // static
+-void ApproximatedDeviceMemory::CalculateAndSetApproximatedDeviceMemory() {
++void ApproximatedDeviceMemory::CalculateAndSetApproximatedDeviceMemory(
++    unsigned logical_processors) {
+   // The calculations in this method are described in the specification:
+   // https://w3c.github.io/device-memory/.
+   DCHECK_GT(physical_memory_mb_, 0);
+@@ -76,6 +80,20 @@ void ApproximatedDeviceMemory::CalculateAndSetApproximatedDeviceMemory() {
+   } else if (approximated_device_memory_gb_ > kMaxMemory) {
+     approximated_device_memory_gb_ = kMaxMemory;
+   }
++
 +#if BUILDFLAG(IS_LINUX)
-+    // Use a common upper bound to reduce fingerprintability on Linux.
-+    kMaxMemory = 8.0f;
-+#elif BUILDFLAG(IS_ANDROID)
-     // Allow smaller lower limits on Android where lower RAM is still common.
-     // Note: As of Jan-2026 some Google Search tests in our test suite
-     // (GoogleAmpSXGStory2019 and BackgroundGoogleStory2019) serve different
++  if (base::FeatureList::IsEnabled(features::kHeliumNoise) &&
++      base::FeatureList::IsEnabled(features::kHeliumNoiseCpuCores)) {
++    const unsigned effective_processors =
++        base::FeatureList::IsEnabled(features::kReducedSystemInfo)
++            ? 2u
++            : logical_processors;
++    if (std::optional<int> profile = SelectDeviceMemoryProfile(
++            effective_processors, physical_memory_mb_)) {
++      approximated_device_memory_gb_ = static_cast<float>(*profile);
++    }
++  }
++#endif
+ }
+ 
+ // static
+@@ -83,6 +101,14 @@ void ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(
+     int64_t physical_memory_mb) {
++  SetPhysicalMemoryMBForTesting(physical_memory_mb,
++                                ::base::SysInfo::NumberOfProcessors());
++}
++
++// static
++void ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(
++    int64_t physical_memory_mb,
++    unsigned logical_processors) {
+   physical_memory_mb_ = physical_memory_mb;
+-  CalculateAndSetApproximatedDeviceMemory();
++  CalculateAndSetApproximatedDeviceMemory(logical_processors);
+ }
+ 
+ }  // namespace blink
 --- a/third_party/blink/common/device_memory/approximated_device_memory_unittest.cc
 +++ b/third_party/blink/common/device_memory/approximated_device_memory_unittest.cc
-@@ -66,7 +66,7 @@ TEST_F(ApproximatedDeviceMemoryTest, Get
-   EXPECT_EQ(4, ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
-   ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(8192);  // 8GB
-   EXPECT_EQ(8, ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
--#if BUILDFLAG(IS_ANDROID)
-+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_LINUX)
-   ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(16384);  // 16GB
-   EXPECT_EQ(8, ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
+@@ -8,2 +8,3 @@
+ #include "build/build_config.h"
++#include "third_party/blink/public/common/features.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+@@ -15,6 +16,10 @@ namespace {
+ class ApproximatedDeviceMemoryTest : public testing::Test {};
+ 
+ TEST_F(ApproximatedDeviceMemoryTest, GetApproximatedDeviceMemory) {
++#if BUILDFLAG(IS_LINUX)
++  base::test::ScopedFeatureList scoped_feature_list;
++  scoped_feature_list.InitAndDisableFeature(features::kHeliumNoise);
++#endif
+   // Test with new, 2026 limits - see https://crbug.com/454354290
+ 
+ #if BUILDFLAG(IS_ANDROID)
+@@ -79,10 +84,64 @@ TEST_F(ApproximatedDeviceMemoryTest, GetApproximatedDeviceMemory) {
    ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(32768);  // 32GB
+   EXPECT_EQ(32, ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
+   ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(64385);  // <64GB
+   EXPECT_EQ(32, ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
+ #endif
+ }
++
++TEST_F(ApproximatedDeviceMemoryTest, LinuxHardwareProfiles) {
++#if BUILDFLAG(IS_LINUX)
++  base::test::ScopedFeatureList scoped_feature_list;
++  scoped_feature_list.InitWithFeatures(
++      {features::kHeliumNoise, features::kHeliumNoiseCpuCores},
++      {features::kReducedSystemInfo});
++  ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(2048, 2);
++  EXPECT_EQ(2, ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
++  ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(8192, 2);
++  EXPECT_EQ(4, ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
++  ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(16384, 4);
++  EXPECT_EQ(8, ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
++  ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(8192, 8);
++  EXPECT_EQ(8, ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
++  ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(16384, 8);
++  EXPECT_EQ(16, ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
++  ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(2000, 8);
++  EXPECT_EQ(2, ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
++  ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(16384, 1);
++  EXPECT_EQ(16, ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
++#endif
++}
++
++TEST_F(ApproximatedDeviceMemoryTest, LinuxProfileFeatureFallbacks) {
++#if BUILDFLAG(IS_LINUX)
++  {
++    base::test::ScopedFeatureList scoped_feature_list;
++    scoped_feature_list.InitAndDisableFeature(features::kHeliumNoise);
++    ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(16384, 4);
++    EXPECT_EQ(16, ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
++  }
++  {
++    base::test::ScopedFeatureList scoped_feature_list;
++    scoped_feature_list.InitWithFeatures({features::kHeliumNoise},
++                                         {features::kHeliumNoiseCpuCores});
++    ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(16384, 4);
++    EXPECT_EQ(16, ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
++  }
++#endif
++}
++
++TEST_F(ApproximatedDeviceMemoryTest, ReducedSystemInfoUsesTwoCoreCapability) {
++#if BUILDFLAG(IS_LINUX)
++  base::test::ScopedFeatureList scoped_feature_list;
++  scoped_feature_list.InitWithFeatures({features::kHeliumNoise,
++                                        features::kHeliumNoiseCpuCores,
++                                        features::kReducedSystemInfo}, {});
++  ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(2048, 32);
++  EXPECT_EQ(2, ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
++  ApproximatedDeviceMemory::SetPhysicalMemoryMBForTesting(16384, 32);
++  EXPECT_EQ(4, ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
++#endif
++}
+ 
+ }  // namespace
+ 
+ }  // namespace blink
+--- a/third_party/blink/renderer/core/loader/frame_fetch_context_test.cc
++++ b/third_party/blink/renderer/core/loader/frame_fetch_context_test.cc
+@@ -701,6 +701,7 @@ class FrameFetchContextHintsTest
+       disabled_features.push_back(
+           blink::features::kQuoteEmptySecChUaStringHeadersConsistently);
+     }
++    disabled_features.push_back(blink::features::kHeliumNoise);
+     scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
+   }
