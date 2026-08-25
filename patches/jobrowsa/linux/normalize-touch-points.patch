@@ -1,14 +1,16 @@
 --- a/third_party/blink/renderer/core/events/navigator_events.cc
 +++ b/third_party/blink/renderer/core/events/navigator_events.cc
-@@ -30,6 +30,7 @@
+@@ -30,6 +30,9 @@
  
  #include "third_party/blink/renderer/core/events/navigator_events.h"
  
++#include "base/feature_list.h"
 +#include "build/build_config.h"
++#include "third_party/blink/public/common/features.h"
  #include "third_party/blink/renderer/core/frame/local_dom_window.h"
  #include "third_party/blink/renderer/core/frame/local_frame.h"
  #include "third_party/blink/renderer/core/frame/navigator.h"
-@@ -39,7 +40,13 @@ namespace blink {
+@@ -39,7 +42,13 @@
  
  int32_t NavigatorEvents::maxTouchPoints(Navigator& navigator) {
    LocalDOMWindow* window = navigator.DomWindow();
@@ -16,10 +18,142 @@
 +  const int32_t max_touch_points =
 +      window ? window->GetFrame()->GetSettings()->GetMaxTouchPoints() : 0;
 +#if BUILDFLAG(IS_LINUX)
-+  return max_touch_points > 0 ? 5 : 0;
-+#else
-+  return max_touch_points;
++  if (base::FeatureList::IsEnabled(features::kHeliumNoise))
++    return max_touch_points > 0 ? 5 : 0;
 +#endif
++  return max_touch_points;
  }
  
  }  // namespace blink
+--- /dev/null
++++ b/third_party/blink/renderer/core/events/navigator_events_test.cc
+@@ -0,0 +1,75 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "third_party/blink/renderer/core/events/navigator_events.h"
++
++#include <array>
++#include <cstdint>
++#include <utility>
++
++#include "base/test/scoped_feature_list.h"
++#include "build/build_config.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/common/features.h"
++#include "third_party/blink/renderer/core/frame/local_dom_window.h"
++#include "third_party/blink/renderer/core/frame/navigator.h"
++#include "third_party/blink/renderer/core/frame/settings.h"
++#include "third_party/blink/renderer/core/testing/page_test_base.h"
++#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
++
++namespace blink {
++
++class NavigatorEventsTest : public PageTestBase {
++ protected:
++  Navigator& GetNavigator() {
++    return *GetDocument().domWindow()->navigator();
++  }
++};
++
++TEST_F(NavigatorEventsTest, NormalizesOnlyPositiveTouchCounts) {
++  base::test::ScopedFeatureList scoped_feature_list;
++  scoped_feature_list.InitWithFeatures({features::kHeliumNoise}, {});
++  for (const auto& [native_value, linux_expected] :
++       std::to_array<std::pair<int32_t, int32_t>>(
++           {{0, 0}, {1, 5}, {5, 5}, {10, 5}})) {
++    GetDocument().GetSettings()->SetMaxTouchPoints(native_value);
++#if BUILDFLAG(IS_LINUX)
++    EXPECT_EQ(linux_expected,
++              NavigatorEvents::maxTouchPoints(GetNavigator()));
++#else
++    EXPECT_EQ(native_value,
++              NavigatorEvents::maxTouchPoints(GetNavigator()));
++#endif
++  }
++}
++
++TEST_F(NavigatorEventsTest, DisabledMasterReturnsNativeValue) {
++  base::test::ScopedFeatureList scoped_feature_list;
++  scoped_feature_list.InitAndDisableFeature(features::kHeliumNoise);
++  GetDocument().GetSettings()->SetMaxTouchPoints(10);
++  EXPECT_EQ(10, NavigatorEvents::maxTouchPoints(GetNavigator()));
++}
++
++TEST_F(NavigatorEventsTest, NullWindowReturnsZero) {
++  base::test::ScopedFeatureList scoped_feature_list;
++  scoped_feature_list.InitWithFeatures({features::kHeliumNoise}, {});
++  Navigator* navigator = MakeGarbageCollected<Navigator>(nullptr);
++  EXPECT_EQ(0, NavigatorEvents::maxTouchPoints(*navigator));
++}
++
++TEST_F(NavigatorEventsTest, IgnoresLegacyTouchAndPrimaryPointerSettings) {
++  base::test::ScopedFeatureList scoped_feature_list;
++  scoped_feature_list.InitWithFeatures({features::kHeliumNoise}, {});
++  Settings* settings = GetDocument().GetSettings();
++  settings->SetMaxTouchPoints(1);
++  settings->SetPrimaryPointerType(mojom::PointerType::kPointerFineType);
++  settings->SetForceTouchEventFeatureDetectionForInspector(false);
++#if BUILDFLAG(IS_LINUX)
++  EXPECT_EQ(5, NavigatorEvents::maxTouchPoints(GetNavigator()));
++#else
++  EXPECT_EQ(1, NavigatorEvents::maxTouchPoints(GetNavigator()));
++#endif
++}
++
++}  // namespace blink
+--- a/third_party/blink/renderer/core/events/build.gni
++++ b/third_party/blink/renderer/core/events/build.gni
+@@ -97,6 +97,7 @@
+ blink_core_tests_events = [
+   "message_event_test.cc",
+   "mouse_event_test.cc",
++  "navigator_events_test.cc",
+   "pointer_event_factory_test.cc",
+   "pointer_event_util_test.cc",
+   "touch_event_test.cc",
+--- a/third_party/blink/renderer/core/frame/web_frame_test.cc
++++ b/third_party/blink/renderer/core/frame/web_frame_test.cc
+@@ -10338,8 +10338,7 @@
+     EXPECT_EQ(expected_size, DumpSize("test"));
+   }
+ 
+-  String DumpSize(const String& id) {
+-    String code = "dumpSize('" + id + "')";
++  String EvaluateString(const String& code) {
+     v8::HandleScope scope(web_view_helper_.GetAgentGroupScheduler().Isolate());
+     ScriptExecutionCallbackHelper callback_helper;
+     ExecuteScriptInMainWorld(web_view_helper_.GetWebView()->MainFrameImpl(),
+@@ -10349,6 +10348,10 @@
+     return callback_helper.SingleStringValue();
+   }
+ 
++  String DumpSize(const String& id) {
++    return EvaluateString("dumpSize('" + id + "')");
++  }
++
+   frame_test_helpers::WebViewHelper web_view_helper_;
+ };
+ 
+@@ -10377,6 +10380,20 @@
+   web_view_helper_.GetWebView()
+       ->GetDevToolsEmulator()
+       ->SetTouchEventEmulationEnabled(false, 1);
++}
++
++TEST_F(DeviceEmulationTest, MaxTouchPoints) {
++  web_view_helper_.GetWebView()
++      ->GetDevToolsEmulator()
++      ->SetTouchEventEmulationEnabled(true, 10);
++#if BUILDFLAG(IS_LINUX)
++  EXPECT_EQ("5", EvaluateString("String(navigator.maxTouchPoints)"));
++#else
++  EXPECT_EQ("10", EvaluateString("String(navigator.maxTouchPoints)"));
++#endif
++  web_view_helper_.GetWebView()
++      ->GetDevToolsEmulator()
++      ->SetTouchEventEmulationEnabled(false, 1);
+ }
+ 
+ TEST_F(WebFrameTest, CreateLocalChildWithPreviousSibling) {
