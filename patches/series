@@ -111,6 +111,7 @@ jobrowsa/linux/clamp-device-memory.patch
 jobrowsa/linux/normalize-web-timezone.patch
 jobrowsa/linux/normalize-touch-points.patch
 jobrowsa/linux/normalize-hardware-concurrency.patch
+jobrowsa/linux/font-cohort-adapter.patch
 jobrowsa/linux/change-chromium-branding.patch
 jobrowsa/linux/rename-chrome-binary.patch
 jobrowsa/core/rename-product-branding.patch

@@ -1,0 +1,264 @@
+Index: src/third_party/blink/renderer/core/helium_noise/build.gni
+===================================================================
+--- src.orig/third_party/blink/renderer/core/helium_noise/build.gni
++++ src/third_party/blink/renderer/core/helium_noise/build.gni
+@@ -16,6 +16,12 @@ blink_core_sources_helium_noise = [
+   "font_cohort.cc",
+   "font_cohort.h",
+ ]
++if (is_linux) {
++  blink_core_sources_helium_noise += [
++    "linux/font_cohort_linux.cc",
++    "linux/font_cohort_linux.h",
++  ]
++}
+ 
+ blink_core_tests_helium_noise = [
+   "helium_noise_profile_test.cc",
+@@ -24,3 +30,6 @@ blink_core_tests_helium_noise = [
+   "text_policy_test.cc",
+   "font_cohort_test.cc",
+ ]
++if (is_linux) {
++  blink_core_tests_helium_noise += [ "linux/font_cohort_linux_test.cc" ]
++}
+Index: src/third_party/blink/renderer/core/helium_noise/font_cohort.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/helium_noise/font_cohort.cc
++++ src/third_party/blink/renderer/core/helium_noise/font_cohort.cc
+@@ -16,6 +16,10 @@
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/core/helium_noise/helium_noise_hash.h"
+ #include "third_party/blink/renderer/core/helium_noise/helium_noise_profile.h"
++#include "third_party/blink/renderer/platform/fonts/font_cache.h"
++#if BUILDFLAG(IS_LINUX)
++#include "third_party/blink/renderer/core/helium_noise/linux/font_cohort_linux.h"
++#endif
+ 
+ namespace blink {
+ namespace helium_noise {
+@@ -229,12 +233,20 @@ std::unique_ptr<FontCohortResolver> GetF
+   if (!profile) {
+     return nullptr;
+   }
++#if BUILDFLAG(IS_LINUX)
++  if (AvailabilityProbe().is_null()) {
++    return FontCohortResolver::Create(
++        profile->Hash(ProfileDomain::kFont),
++        ProbeAvailableFontIdentitiesLinux(&FontCache::Get()));
++  }
++#endif
+   Vector<uint8_t> available =
+       AvailabilityProbe().is_null() ? Vector<uint8_t>()
+                                     : AvailabilityProbe().Run();
+   return FontCohortResolver::Create(
+       profile->Hash(ProfileDomain::kFont), available);
+ }
++#include "build/build_config.h"
+ 
+ FontGenericClass ToFontGenericClass(
+     FontDescription::GenericFamilyType generic_family) {
+Index: src/third_party/blink/renderer/core/helium_noise/linux/font_cohort_linux.cc
+===================================================================
+--- /dev/null
++++ src/third_party/blink/renderer/core/helium_noise/linux/font_cohort_linux.cc
+@@ -0,0 +1,113 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "third_party/blink/renderer/core/helium_noise/linux/font_cohort_linux.h"
++
++#include <array>
++
++#include "build/build_config.h"
++#include "third_party/blink/renderer/core/helium_noise/font_cohort.h"
++#include "third_party/blink/renderer/platform/fonts/font_cache.h"
++#include "third_party/blink/renderer/platform/fonts/font_description.h"
++#include "third_party/blink/renderer/platform/fonts/simple_font_data.h"
++
++namespace blink {
++namespace helium_noise {
++
++namespace {
++
++// Exactly the removable style suffixes; never strip arbitrary words.
++constexpr const char* kStyleSuffixes[] = {
++    "regular", "roman",   "book",  "medium", "bold",
++    "italic",  "oblique", "light", "semibold",
++};
++
++bool IsFamilyLastResortFor(const String& platform_name,
++                           const String& requested) {
++  return false;
++}
++
++bool MatchesInstalledFamily(FontCache* font_cache,
++                            const FontIdentity& identity,
++                            const char* declared_name) {
++  if (!declared_name || declared_name[0] == '\0') {
++    return false;
++  }
++  FontDescription description;
++  // Alternate-name behavior disabled: aliases beyond the declared table
++  // names must not count.
++  const SimpleFontData* font_data = font_cache->GetFontData(
++      description, AtomicString(declared_name),
++      AlternateFontName::kNoAlternate);
++  if (!font_data) {
++    return false;
++  }
++  const String platform_name = font_data->PlatformData().FontFamilyName();
++  if (NormalizePlatformFamily(platform_name) ==
++      NormalizePlatformFamily(String(declared_name))) {
++    return true;
++  }
++  return false;
++}
++
++}  // namespace
++
++String NormalizePlatformFamily(const String& name) {
++  String normalized = name.DeprecatedLower();
++  normalized = normalized.Replace('-', ' ');
++  while (normalized.find("  ") != kNotFound) {
++    normalized = normalized.Replace("  ", " ");
++  }
++  for (const char* suffix : kStyleSuffixes) {
++    const String suffix_string(suffix);
++    // Only one trailing suffix removal; require the separator so that
++    // arbitrary trailing words are preserved.
++    if (normalized.DeprecatedEndsWithIgnoringCase(suffix_string) &&
++        normalized.length() > suffix_string.length() + 1) {
++      const unsigned without = normalized.length() - suffix_string.length();
++      if (normalized[without - 1] == ' ') {
++        normalized = normalized.DeprecatedSubstring(0, without - 1);
++        break;
++      }
++    }
++  }
++  return normalized;
++}
++
++Vector<uint8_t> ProbeAvailableFontIdentitiesLinux(FontCache* font_cache) {
++  Vector<uint8_t> available;
++  if (!font_cache) {
++    return available;
++  }
++  const auto identities = ApprovedFontIdentities();
++  for (uint8_t index = 0; index < identities.size(); ++index) {
++    const FontIdentity& identity = identities[index];
++    bool matched = MatchesInstalledFamily(font_cache, identity,
++                                          identity.primary);
++    if (!available.Contains(index) && !identity.aliases[0][0]) {
++      // aliases empty
++    }
++    for (const char* alias : identity.aliases) {
++      if (alias[0] != '\0' && !available.Contains(index)) {
++        if (MatchesInstalledFamily(font_cache, identity, alias)) {
++          available.push_back(index);
++          break;
++        }
++      }
++    }
++    if (!available.Contains(index)) {
++      if (MatchesInstalledFamily(font_cache, identity, identity.primary)) {
++        available.push_back(index);
++      }
++    }
++  }
++  return available;
++}
++
++}  // namespace helium_noise
++}  // namespace blink
+Index: src/third_party/blink/renderer/core/helium_noise/linux/font_cohort_linux.h
+===================================================================
+--- /dev/null
++++ src/third_party/blink/renderer/core/helium_noise/linux/font_cohort_linux.h
+@@ -0,0 +1,36 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_LINUX_FONT_COHORT_LINUX_H_
++#define THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_LINUX_FONT_COHORT_LINUX_H_
++
++#include <cstdint>
++
++#include "third_party/blink/renderer/core/core_export.h"
++#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
++#include "third_party/blink/renderer/platform/wtf/vector.h"
++
++namespace blink {
++
++class FontCache;
++
++namespace helium_noise {
++
++// Linux availability adapter: probes only the approved table rows through
++// FontCache and returns the sorted unique indices of the identities whose
++// primary or declared alias name resolves to a real installed family.
++CORE_EXPORT Vector<uint8_t> ProbeAvailableFontIdentitiesLinux(FontCache* font_cache);
++
++// Comparison-only normalization: lowercase, collapse spaces/hyphens, and
++// remove at most one trailing known style suffix.
++CORE_EXPORT String NormalizePlatformFamily(const String& name);
++
++}  // namespace helium_noise
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_LINUX_FONT_COHORT_LINUX_H_
+\ No newline at end of file
+Index: src/third_party/blink/renderer/core/helium_noise/linux/font_cohort_linux_test.cc
+===================================================================
+--- /dev/null
++++ src/third_party/blink/renderer/core/helium_noise/linux/font_cohort_linux_test.cc
+@@ -0,0 +1,38 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "third_party/blink/renderer/core/helium_noise/linux/font_cohort_linux.h"
++
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace blink {
++namespace helium_noise {
++
++TEST(FontCohortLinuxTest, NormalizesOnlyKnownStyleSuffixes) {
++  EXPECT_EQ("liberation sans",
++            NormalizePlatformFamily("Liberation Sans Bold"));
++  EXPECT_EQ("dejavu sans mono", NormalizePlatformFamily("DejaVu-Sans-Mono"));
++  EXPECT_EQ("fingerprint test font",
++            NormalizePlatformFamily("Fingerprint Test Font"));
++  // A trailing word that is not a known style suffix must survive.
++  EXPECT_EQ("fingerprint test font ultra",
++            NormalizePlatformFamily("Fingerprint Test Font Ultra"));
++  // Multiple style suffixes: only one is removed.
++  EXPECT_EQ("noto serif italic",
++            NormalizePlatformFamily("Noto Serif Italic Bold"));
++}
++
++TEST(FontCohortLinuxTest, NormalizationIsComparisonOnlyPreservingCase) {
++  // Normalization only affects comparison; declared names are exact matches
++  // against a normalized platform name from PlatformData.
++  EXPECT_EQ(NormalizePlatformFamily("Liberation-Sans Regular"),
++            NormalizePlatformFamily("liberation sans"));
++}
++
++}  // namespace helium_noise
++}  // namespace blink
+\ No newline at end of file
