@@ -5,10 +5,16 @@ I'm tired of elements and sciency names. This is my fork, Joe's fork, Joe's bows
 A fork of Helium for Linux with:
 - Trivalent's patches, including Vanadium
 - Fingerprinting Improvements:
-  - Timezone normalized to UTC
-  - CPU count hardcoded to 8
-  - Device memory clamped to 8GB
+  - Timezone normalized to anonymity cohort representatives (e.g. `America/Toronto` reports as `America/New_York`); fixed offsets like UTC are left untouched
+  - CPU count and device memory reported from coordinated capability-safe hardware profiles, so `navigator.hardwareConcurrency` and `navigator.deviceMemory` always describe a plausible machine
   - Max touch points limited to 5
+  - Installed-font probing so Helium's font cohort policy reflects the fonts actually present on Linux
+- Performance features from [Thorium](https://github.com/Alex313031/thorium):
+  - x86-64 baseline SIMD raised to AVX (SSE3 through SSE4.2, AES-NI, PCLMUL) plus WebRTC AVX2
+  - Aggressive ThinLTO optimizations and hot/cold text section splitting
+  - 256-bit re-vectorization pass in the V8 WASM pipeline
+  - Inline script precompiling for faster page loads
+  - Stack variables zero-initialized
 - Extra hardening compiler flags based on recommendations by [OpenSSF](https://best.openssf.org/Compiler-Hardening-Guides/Compiler-Options-Hardening-Guide-for-C-and-C++.html)
 
 ## Building Jobrowsa
@@ -61,6 +67,16 @@ The Vanadium and Trivalent patch sets are synced from
 [Trivalent](https://github.com/secureblue/Trivalent), the Chromium-based
 browser maintained by the secureblue project. Vendored patches are tracked in
 `trivalent.manifest`, with sync tooling in `scripts/sync-trivalent.sh`.
+
+### Thorium
+
+Performance features are adapted from
+[Thorium](https://github.com/Alex313031/thorium), the performance-focused
+Chromium fork. The x86-64 SIMD baseline patch derives from Thorium's
+`build/config/compiler_opt.gni`, and the remaining knobs (ThinLTO
+optimizations, text section splitting, WASM 256-bit re-vectorization, inline
+script precompiling, zero-initialized stack variables) are enabled via
+`flags.linux.gn`.
 
 ## License
 
