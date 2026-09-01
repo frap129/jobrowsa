@@ -24,20 +24,20 @@ index 4ff0446eb8..a383d56cd8 100644
  
  <if expr="not is_chromeos">
 diff --git a/chrome/browser/resources/settings/privacy_page/privacy_page.html b/chrome/browser/resources/settings/privacy_page/privacy_page.html
-index 95b225cc32..06e98d1a25 100644
+index ff64109f8e..5e52787032 100644
 --- a/chrome/browser/resources/settings/privacy_page/privacy_page.html
 +++ b/chrome/browser/resources/settings/privacy_page/privacy_page.html
-@@ -67,8 +67,8 @@
-       </cr-link-row>
-     </template>
-     <cr-link-row id="securityLinkRow" start-icon="privacy:lock"
+@@ -34,8 +34,8 @@
+         role-description="$i18n{subpageArrowRoleDescription}">
+     </cr-link-row>
+     <cr-link-row id="securityLinkRow" start-icon="[[getLockIcon_()]]"
 -        class="hr" label="$i18n{securityPageTitle}"
 -        sub-label="$i18n{securityPageDescription}"
 +        class="hr" label="$i18n{privacyPageTitle}"
 +        sub-label="$i18n{privacyGuidePromoBody}"
          on-click="onSecurityPageClick_"
          role-description="$i18n{subpageArrowRoleDescription}"></cr-link-row>
-     <cr-link-row id="siteSettingsLinkRow" start-icon="privacy:page-info"
+     <cr-link-row id="siteSettingsLinkRow" start-icon="[[getPageInfoIcon_()]]"
 diff --git a/chrome/browser/resources/settings/route.ts b/chrome/browser/resources/settings/route.ts
 index 51af5ee843..d6e8f04729 100644
 --- a/chrome/browser/resources/settings/route.ts

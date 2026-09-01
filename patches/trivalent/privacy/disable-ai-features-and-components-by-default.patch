@@ -54,33 +54,20 @@ index 5d4e803be9693..1609d4291c53e 100644
    registry->RegisterIntegerPref(
        prefs::kDevToolsGoogleDeveloperProgramProfileAvailability,
        /* enabled */ 0);
-diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
-index 2c7878aec4a53..02cb255a30814 100644
---- a/chrome/browser/prefs/browser_prefs.cc
-+++ b/chrome/browser/prefs/browser_prefs.cc
-@@ -2095,7 +2095,7 @@ void RegisterScreenshotPrefs(PrefRegistrySimple* registry) {
- }
- 
- void RegisterGeminiSettingsPrefs(user_prefs::PrefRegistrySyncable* registry) {
--  registry->RegisterIntegerPref(prefs::kGeminiSettings, 0);
-+  registry->RegisterIntegerPref(prefs::kGeminiSettings, 1);
- }
- 
  #if BUILDFLAG(IS_CHROMEOS)
 diff --git a/components/omnibox/browser/aim_eligibility_service.cc b/components/omnibox/browser/aim_eligibility_service.cc
-index de465ad4e7..3d8b3fd751 100644
+index 0d6ba3f732..ae7a276660 100644
 --- a/components/omnibox/browser/aim_eligibility_service.cc
 +++ b/components/omnibox/browser/aim_eligibility_service.cc
-@@ -247,10 +247,8 @@ bool AimEligibilityService::GenericKillSwitchFeatureCheck(
- // static
- void AimEligibilityService::RegisterProfilePrefs(PrefRegistrySimple* registry) {
-   registry->RegisterStringPref(kResponsePrefName, "");
--  registry->RegisterIntegerPref(omnibox::kAIModeSettings,
+@@ -258,9 +258,9 @@ void AimEligibilityService::RegisterProfilePrefs(PrefRegistrySimple* registry) {
+   registry->RegisterBooleanPref(kManualOverridePrefName, false);
+   registry->RegisterTimePref(kManualOverrideTimestampPrefName, base::Time());
+   registry->RegisterIntegerPref(omnibox::kAIModeSettings,
 -                                kAiModeAllowedDefault);
--  registry->RegisterIntegerPref(omnibox::kThirdPartyAiChatSettings,
++                                1);
+   registry->RegisterIntegerPref(omnibox::kThirdPartyAiChatSettings,
 -                                kAiModeAllowedDefault);
-+  registry->RegisterIntegerPref(omnibox::kAIModeSettings, 1);
-+  registry->RegisterIntegerPref(omnibox::kThirdPartyAiChatSettings, 1);
++                                1);
  }
 
  // static
@@ -110,10 +97,37 @@ index c5ceac4713a5b..a25847ee6022d 100644
          PrefRegistry::LOSSY_PREF);
    }
    // From that point on, it's too late to modify the registry as the prefs
+diff --git a/chrome/browser/glic/glic_pref_names.cc b/chrome/browser/glic/glic_pref_names.cc
+index a38032123d..a8d891ab45 100644
+--- a/chrome/browser/glic/glic_pref_names.cc
++++ b/chrome/browser/glic/glic_pref_names.cc
+@@ -122,7 +122,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
+
+   registry->RegisterIntegerPref(
+       prefs::kGlicActuationOnWeb,
+-      std::to_underlying(GetGlicActuationOnWebPolicyState()));
++      1);
+
+   registry->RegisterIntegerPref(
+       prefs::kGlicFileUploadAllowed,
+diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
+index 1317d71ce1..31249ee199 100644
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -2284,7 +2284,7 @@ void RegisterScreenshotPrefs(PrefRegistrySimple* registry) {
+ }
+
+ void RegisterGeminiSettingsPrefs(user_prefs::PrefRegistrySyncable* registry) {
+-  registry->RegisterIntegerPref(optimization_guide::prefs::kGeminiSettings, 0);
++  registry->RegisterIntegerPref(optimization_guide::prefs::kGeminiSettings, 1);
+ }
+
+ #if BUILDFLAG(IS_CHROMEOS)
 diff --git a/components/contextual_search/contextual_search_service.cc b/components/contextual_search/contextual_search_service.cc
+index d38f101331..d6bf7766ec 100644
 --- a/components/contextual_search/contextual_search_service.cc
 +++ b/components/contextual_search/contextual_search_service.cc
-@@ -68,7 +68,8 @@
+@@ -68,7 +68,8 @@ void ContextualSearchService::RegisterProfilePrefs(
      PrefRegistrySimple* registry) {
    registry->RegisterIntegerPref(
        kSearchContentSharingSettings,
@@ -124,28 +138,18 @@ diff --git a/components/contextual_search/contextual_search_service.cc b/compone
        kDriveConsentState, static_cast<int>(DriveConsentState::kRestricted),
        user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 diff --git a/components/optimization_guide/core/model_execution/model_execution_prefs.cc b/components/optimization_guide/core/model_execution/model_execution_prefs.cc
-index c01de2e0f7..b37b6254e2 100644
+index 36240678e7..c2c6f7cb72 100644
 --- a/components/optimization_guide/core/model_execution/model_execution_prefs.cc
 +++ b/components/optimization_guide/core/model_execution/model_execution_prefs.cc
-@@ -124,7 +124,7 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
+@@ -129,9 +129,9 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
    registry->RegisterInt64Pref(localstate::kModelQualityLoggingClientId, 0,
                                PrefRegistry::LOSSY_PREF);
    registry->RegisterIntegerPref(
 -      localstate::kGenAILocalFoundationalModelEnterprisePolicySettings, 0);
 +      localstate::kGenAILocalFoundationalModelEnterprisePolicySettings, 1);
    registry->RegisterBooleanPref(localstate::kOnDeviceAiUserSettingsEnabled,
-                                 true);
+-                                true);
++                                false);
+   registry->RegisterBooleanPref(localstate::kEmbeddingApiModelDownloadEligible,
+                                 false);
    registry->RegisterDictionaryPref(localstate::kManifestAssetLedger);
-diff --git a/chrome/browser/glic/glic_pref_names.cc b/chrome/browser/glic/glic_pref_names.cc
-index 128e61fe32..12e021e73c 100644
---- a/chrome/browser/glic/glic_pref_names.cc
-+++ b/chrome/browser/glic/glic_pref_names.cc
-@@ -70,7 +70,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
- 
-   registry->RegisterIntegerPref(
-       prefs::kGlicActuationOnWeb,
--      std::to_underlying(GetGlicActuationOnWebPolicyState()));
-+      1);
- 
-   registry->RegisterListPref(prefs::kGlicActuationOnWebAllowedForURLs);
-   registry->RegisterListPref(prefs::kGlicActuationOnWebBlockedForURLs);

@@ -38,38 +38,39 @@ diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chro
    // Miscellaneous
    (*s_allowlist)[::embedder_support::kAlternateErrorPagesEnabled] =
        settings_api::PrefType::kBoolean;
-diff --git a/chrome/browser/resources/settings/appearance_page/appearance_page.html b/chrome/browser/resources/settings/appearance_page/appearance_page.html
---- a/chrome/browser/resources/settings/appearance_page/appearance_page.html
-+++ b/chrome/browser/resources/settings/appearance_page/appearance_page.html
-@@ -140,6 +140,11 @@
-               label="$i18n{zenModePinToolbar}">
-           </settings-toggle-button>
-         </div>
-+        <div class="hr"></div>
-+        <settings-toggle-button
-+            pref="{{prefs.webkit.webprefs.force_dark_mode_enabled}}"
-+            label="$i18n{websiteDarkMode}">
-+        </settings-toggle-button>
-         <div
-             class="hr"
-             hidden="[[!showHr_(
-diff --git a/chrome/browser/resources/settings/system_page/system_page.html b/chrome/browser/resources/settings/system_page/system_page.html
-index 2a44a0d606..f3790357da 100644
---- a/chrome/browser/resources/settings/system_page/system_page.html
-+++ b/chrome/browser/resources/settings/system_page/system_page.html
-@@ -27,6 +27,12 @@
-         </cr-button>
-       </template>
-     </settings-toggle-button>
-+<if expr="enable_printing">
-+    <settings-toggle-button class="cr-row"
-+        pref="{{prefs.printing.enabled}}"
-+        label="$i18n{printingCapabilities}">
+diff --git a/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts b/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
+index 41b80c71f3..1f4f2bedf7 100644
+--- a/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
++++ b/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
+@@ -80,6 +80,11 @@ export function getHtml(this: SettingsAppearancePageElement) {
+         `)}
+       </select>
+     </div>
++    <div class="hr"></div>
++    <settings-toggle-button
++       pref-key="webkit.webprefs.force_dark_mode_enabled"
++       label="$i18n{websiteDarkMode}">
 +    </settings-toggle-button>
+     <div class="hr" ?hidden="${!this.showHr_(
+         this.pageVisibility_.setTheme, this.pageVisibility_.homeButton)}">
+     </div>
+diff --git a/chrome/browser/resources/settings/system_page/system_page.html.ts b/chrome/browser/resources/settings/system_page/system_page.html.ts
+index f70f5d24aa..e20ab1a318 100644
+--- a/chrome/browser/resources/settings/system_page/system_page.html.ts
++++ b/chrome/browser/resources/settings/system_page/system_page.html.ts
+@@ -28,6 +28,12 @@ export function getHtml(this: SettingsSystemPageElement) {
+       </cr-button>
+     ` : ''}
+   </settings-toggle-button>
++<if expr="enable_printing">
++  <settings-toggle-button class="cr-row"
++      pref-key="printing.enabled"
++      label="$i18n{printingCapabilities}">
++  </settings-toggle-button>
 +</if>
-     <!-- <if expr="is_win"> -->
-     <template is="dom-if" if="[[showProcessIsolationSetting_]]" restamp>
-       <div class="hr"></div>
+ <if expr="is_win">
+   ${this.showProcessIsolationSetting_ ? html`
+     <div class="hr"></div>
 diff --git a/chrome/browser/resources/settings/search_page/search_page.html b/chrome/browser/resources/settings/search_page/search_page.html
 index 819dc168bd..460caa8b67 100644
 --- a/chrome/browser/resources/settings/search_page/search_page.html

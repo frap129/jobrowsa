@@ -22,16 +22,20 @@ diff --git a/chrome/browser/ui/browser_ui_prefs.cc b/chrome/browser/ui/browser_u
    registry->RegisterListPref(prefs::kWebRTCIPHandlingUrl, base::ListValue());
    registry->RegisterBooleanPref(prefs::kWebRTCPostQuantumKeyAgreement, false);
    registry->RegisterStringPref(prefs::kWebRTCUDPPortRange, std::string());
-@@ -198,9 +198,9 @@
+@@ -198,9 +198,16 @@
++  registry->RegisterBooleanPref(prefs::kWebRtcEventLogCollectionAllowed, false);
++  registry->RegisterListPref(prefs::kWebRtcLocalIpsAllowedUrls);
++  registry->RegisterBooleanPref(prefs::kWebRtcTextLogCollectionAllowed, false);
++  registry->RegisterListPref(
++      prefs::kWebRTCDiagnosticLogCollectionAllowedForOrigins,
++      base::ListValue());
++
    // We need to register the type of these preferences in order to query
    // them even though they're only typically controlled via policy.
    registry->RegisterBooleanPref(policy::policy_prefs::kHideWebStoreIcon, true);
 -  registry->RegisterBooleanPref(prefs::kSharedClipboardEnabled, true);
 +  registry->RegisterBooleanPref(prefs::kSharedClipboardEnabled, false);
- 
--  registry->RegisterBooleanPref(prefs::kClickToCallEnabled, true);
-+  registry->RegisterBooleanPref(prefs::kClickToCallEnabled, false);
- 
+
  #if BUILDFLAG(IS_MAC)
    // This really belongs in platform code, but there's no good place to
 @@ -228,7 +228,7 @@

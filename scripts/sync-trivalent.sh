@@ -142,7 +142,8 @@ _local_group_for() {
         ;;
     patches/trivalent/security | patches/trivalent/privacy | \
         patches/trivalent/ui | patches/trivalent/translations | \
-        patches/trivalent/linux | patches/trivalent/fixes)
+        patches/trivalent/linux | patches/trivalent/fixes | \
+        patches/trivalent/ugc)
         printf '%s\n' "$1"
         ;;
     # Excluded groups are skipped recursively: the /* alternatives cover

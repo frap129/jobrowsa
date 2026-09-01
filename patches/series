@@ -33,14 +33,15 @@ vanadium/0120-enable-split-cache-by-default.patch
 vanadium/0121-enable-partitioning-connections-by-default.patch
 vanadium/0122-enable-dubious-Do-Not-Track-feature-by-default.patch
 vanadium/0124-Enable-strict-origin-isolation-by-default.patch
-vanadium/0160-Derive-high-entropy-client-hints-with-reduced-user-a.patch
-vanadium/0165-Use-local-list-of-supported-languages-for-Language-s.patch
-vanadium/0201-enable-subresource-filter-on-all-sites.patch
-vanadium/0228-Support-restriction-of-dynamic-code.patch
-vanadium/0229-Restriction-of-dynamic-code-execution-via-seccomp-bp.patch
-vanadium/0233-Enable-HSTS-upgrades-for-top-level-navigation-only-b.patch
-vanadium/0245-enable-more-Local-Network-Access-coverage-checks-by-.patch
-vanadium/0250-Enable-origin-keyed-process-isolation-by-default.patch
+vanadium/0159-Derive-high-entropy-client-hints-with-reduced-user-a.patch
+vanadium/0164-Use-local-list-of-supported-languages-for-Language-s.patch
+vanadium/0200-enable-subresource-filter-on-all-sites.patch
+vanadium/0227-Support-restriction-of-dynamic-code.patch
+vanadium/0228-Restriction-of-dynamic-code-execution-via-seccomp-bp.patch
+vanadium/0232-Enable-HSTS-upgrades-for-top-level-navigation-only-b.patch
+vanadium/0243-enable-certificate-transparency-feature-by-default-f.patch
+vanadium/0244-enable-more-Local-Network-Access-coverage-checks-by-.patch
+vanadium/0249-Enable-origin-keyed-process-isolation-by-default.patch
 vanadium/modified-block-playing-protected-media-by-default.patch
 vanadium/modified-disable-seed-based-field-trials.patch
 
@@ -67,7 +68,7 @@ trivalent/privacy/disable-promotions-by-default.patch
 trivalent/privacy/disable-protected-content.patch
 trivalent/privacy/disable-search-suggest-by-default.patch
 trivalent/privacy/disable-sync-by-default.patch
-trivalent/search-config-improvments.patch
+trivalent/search-config-improvements.patch
 trivalent/search-selection.patch
 trivalent/security/add-feature-to-disable-pdf-javascript.patch
 trivalent/security/add-feature-to-show-puny-code.patch
@@ -81,6 +82,7 @@ trivalent/security/disable-password-manager-prompt-by-default.patch
 trivalent/security/disable-printing-by-default.patch
 trivalent/security/disable-remote-access-by-default.patch
 trivalent/security/disable-various-content-settings-by-default.patch
+trivalent/security/disable-webgpu.patch
 trivalent/security/enable-partitionalloc-advanced-checks.patch
 trivalent/security/enable-strict-extension-verification.patch
 trivalent/security/extension-access-hardening.patch
@@ -120,3 +122,7 @@ jobrowsa/core/rename-helium-scheme.patch
 jobrowsa/core/rename-hardcoded-labels.patch
 jobrowsa/linux/simd-baseline-avx.patch
 jobrowsa/linux/precompile-inline-scripts.patch
+
+trivalent/ugc/add-flag-to-scope-omnibox-autocomplete.patch
+
+trivalent/fixes/152-fixes.patch

@@ -13,7 +13,23 @@ See the License for the specific language governing permissions and limitations 
 diff --git a/chrome/browser/about_flags.cc b/chrome/browser/about_flags.cc
 --- a/chrome/browser/about_flags.cc
 +++ b/chrome/browser/about_flags.cc
-@@ -4759,6 +4759,69 @@
+@@ -500,6 +500,15 @@ const FeatureEntry::Choice kEnableBenchmarkingChoices[] = {
+      variations::switches::kEnableFieldTrialTestingConfig},
+ };
+ 
++const char kScopeOmniboxAutocomplete[] = "scope-omnibox-autocomplete";
++
++const FeatureEntry::Choice kScopeOmniboxAutocompleteChoices[] = {
++    {flags_ui::kGenericExperimentChoiceDefault, "", ""},
++    {"Search Only", kScopeOmniboxAutocomplete, "search"},
++    {"Search and Bookmarks", kScopeOmniboxAutocomplete, "search,bookmarks"},
++    {"Search and Chrome Pages", kScopeOmniboxAutocomplete, "search,chrome"},
++    {"Search, Bookmarks, and Chrome Pages", kScopeOmniboxAutocomplete, "search,bookmarks,chrome"}};
++
+ #if !BUILDFLAG(IS_ANDROID)
+ const FeatureEntry::Choice kIwaKeyDistributionComponentExpCohortChoices[] = {
+     {flags_ui::kGenericExperimentChoiceDisabled, "", ""},
+@@ -4759,6 +4773,77 @@
  #include "chrome/browser/ungoogled_platform_flag_choices.h"
  #include "chrome/browser/existing_switch_flag_choices.h"
  const FeatureEntry kFeatureEntries[] = {
@@ -22,6 +38,10 @@ diff --git a/chrome/browser/about_flags.cc b/chrome/browser/about_flags.cc
 +     "by default. This feature is provided by Trivalent.",
 +     kOsLinux,
 +     FEATURE_VALUE_TYPE(views::features::kMiddleClickCopyPaste)},
++    {"scope-omnibox-autocomplete", "Scope Omnibox Autocomplete",
++     "Limit the scope categories of results that omnibox autocomplete can "
++     "show. This flag is provided by Trivalent via Ungoogled Chromium.",
++     kOsAll, MULTI_VALUE_TYPE(kScopeOmniboxAutocompleteChoices)},
 +    {"show-punycode-domains", "Show punycode for IDN domains",
 +     "Shows punycode for IDN domains to mitigate IDN homograph attacks. "
 +     "Disabled by default. This feature is provided by Trivalent.",

@@ -10,6 +10,32 @@ Unless required by applicable law or agreed to in writing, software distributed 
 distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and limitations under the License.
 ---
+diff --git a/chrome/browser/resources/settings/privacy_page/personalization_options.html b/chrome/browser/resources/settings/privacy_page/personalization_options.html
+index 50a3c35672..da855e05a0 100644
+--- a/chrome/browser/resources/settings/privacy_page/personalization_options.html
++++ b/chrome/browser/resources/settings/privacy_page/personalization_options.html
+@@ -24,7 +24,7 @@
+
+     </style>
+
+-<if expr="not is_chromeos">
++<if expr="is_chromeos">
+     <div id="chromeSigninUserChoiceSetting" class="hr cr-row" role="group"
+         hidden="[[!chromeSigninUserChoiceInfo_.shouldShowSettings]]"
+         aria-label="$i18n{chromeSigninChoiceTitle}">
+@@ -64,7 +64,6 @@
+         on-settings-boolean-control-change="onSigninAllowedChange_"
+         no-set-pref>
+     </settings-toggle-button>
+-</if><!-- not chromeos -->
+ <if expr="_google_chrome">
+ <if expr="is_chromeos">
+     <!-- Ash Browser settings show a link to the OS settings instead. -->
+@@ -175,3 +174,4 @@
+       <div>$i18n{chromeSigninChoiceToast}</div>
+     </cr-toast>
+ </if>
++</if><!-- chromeos -->
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
