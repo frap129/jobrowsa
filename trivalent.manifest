@@ -115,7 +115,7 @@ patches/third_party/vanadium/0242-Further-disable-password-leak-detection-checks
 patches/trivalent/fixes/152-fixes.patch cf6e6482d6868286041a4cc1b605fd10624c69aa pristine
 patches/third_party/vanadium/0159-Derive-high-entropy-client-hints-with-reduced-user-a.patch c530eb5d32f27f9afc5ad73ec12432975522f95f pristine
 patches/third_party/vanadium/0249-Enable-origin-keyed-process-isolation-by-default.patch 7d20b8fffce94acab2a07d2321ecb65f9cb32782 pristine
-patches/third_party/vanadium/0243-enable-certificate-transparency-feature-by-default-f.patch d4fd941af357faad103f4c4534b1deb80ab57ee4 pristine
+patches/third_party/vanadium/0243-enable-certificate-transparency-feature-by-default-f.patch d4fd941af357faad103f4c4534b1deb80ab57ee4 dropped
 patches/third_party/vanadium/0232-Enable-HSTS-upgrades-for-top-level-navigation-only-b.patch 4a30035a536a09226664bc0338d1ab48be61acec pristine
 patches/trivalent/security/disable-webgpu.patch d77f6058fd126733e53af3d9fcd650a78c6f37e7 pristine
 patches/third_party/vanadium/0200-enable-subresource-filter-on-all-sites.patch 5148fa8fa83191784ddd0acf75a18701f829f9f8 pristine

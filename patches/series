@@ -39,7 +39,6 @@ vanadium/0200-enable-subresource-filter-on-all-sites.patch
 vanadium/0227-Support-restriction-of-dynamic-code.patch
 vanadium/0228-Restriction-of-dynamic-code-execution-via-seccomp-bp.patch
 vanadium/0232-Enable-HSTS-upgrades-for-top-level-navigation-only-b.patch
-vanadium/0243-enable-certificate-transparency-feature-by-default-f.patch
 vanadium/0244-enable-more-Local-Network-Access-coverage-checks-by-.patch
 vanadium/0249-Enable-origin-keyed-process-isolation-by-default.patch
 vanadium/modified-block-playing-protected-media-by-default.patch
