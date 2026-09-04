@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and limitations 
 diff --git a/chrome/browser/about_flags.cc b/chrome/browser/about_flags.cc
 --- a/chrome/browser/about_flags.cc
 +++ b/chrome/browser/about_flags.cc
-@@ -500,6 +500,15 @@ const FeatureEntry::Choice kEnableBenchmarkingChoices[] = {
+@@ -511,6 +511,15 @@ const FeatureEntry::Choice kEnableBenchmarkingChoices[] = {
       variations::switches::kEnableFieldTrialTestingConfig},
  };
  
@@ -31,7 +31,7 @@ diff --git a/chrome/browser/about_flags.cc b/chrome/browser/about_flags.cc
      {flags_ui::kGenericExperimentChoiceDisabled, "", ""},
 --- a/chrome/browser/about_flags.cc
 +++ b/chrome/browser/about_flags.cc
-@@ -4870,9 +4879,76 @@
+@@ -4874,7 +4883,74 @@ const FeatureEntry::FeatureVariation kToolbarGlowUpVariations[] = {
  #include "chrome/browser/ungoogled_platform_flag_choices.h"
  #include "chrome/browser/existing_switch_flag_choices.h"
  const FeatureEntry kFeatureEntries[] = {
@@ -108,3 +108,4 @@ diff --git a/chrome/browser/about_flags.cc b/chrome/browser/about_flags.cc
  #include "chrome/browser/ungoogled_platform_flag_entries.h"
  // Include generated flags for flag unexpiry; see //docs/flag_expiry.md and
  // //tools/flags/generate_unexpire_flags.py.
+

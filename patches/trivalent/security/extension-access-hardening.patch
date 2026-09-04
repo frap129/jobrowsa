@@ -41,16 +41,16 @@ index c601a1dcd4..51dc173208 100644
 
  BASE_FEATURE_PARAM(bool,
                     kSearchEngineExplicitChoiceDialogEscapable,
-@@ -254,10 +254,10 @@ BASE_FEATURE_PARAM(bool,
+@@ -246,10 +246,10 @@
                     kSearchEngineExplicitChoiceDialogUnlimitedShows,
                     &kSearchEngineExplicitChoiceDialog,
                     "unlimited_shows",
 -                   true);
 +                   false);
-
+ 
  BASE_FEATURE(kSearchEngineUnconditionalDialog,
 -             base::FEATURE_DISABLED_BY_DEFAULT);
 +             base::FEATURE_ENABLED_BY_DEFAULT);
-
- BASE_FEATURE(kOptimizeWebRequestProxy, base::FEATURE_DISABLED_BY_DEFAULT);
+ 
+ BASE_FEATURE(kOptimizeWebRequestProxy, base::FEATURE_ENABLED_BY_DEFAULT);
  

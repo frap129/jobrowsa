@@ -14,11 +14,11 @@ diff --git a/third_party/blink/renderer/platform/runtime_enabled_features.json5 
 index 5e580db63b..69d0e71876 100644
 --- a/third_party/blink/renderer/platform/runtime_enabled_features.json5
 +++ b/third_party/blink/renderer/platform/runtime_enabled_features.json5
-@@ -762,6 +762,7 @@
+@@ -769,6 +769,7 @@
        // P.N. `AutoDarkMode` needs to be applied separately.
        name: "AutoDarkModeSkipImages",
        base_feature: "none",
 +      status: "stable",
      },
      {
-       name: "Autofill",
+       name: "AutoDarkModeSVGSizeThreshold",

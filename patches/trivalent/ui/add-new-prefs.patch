@@ -42,9 +42,7 @@ diff --git a/chrome/browser/resources/settings/appearance_page/appearance_page.h
 index 41b80c71f3..1f4f2bedf7 100644
 --- a/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
 +++ b/chrome/browser/resources/settings/appearance_page/appearance_page.html.ts
-@@ -80,6 +80,11 @@ export function getHtml(this: SettingsAppearancePageElement) {
-         `)}
-       </select>
+@@ -108,2 +108,7 @@
      </div>
 +    <div class="hr"></div>
 +    <settings-toggle-button

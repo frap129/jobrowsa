@@ -14,15 +14,6 @@ diff --git a/chrome/browser/resources/settings/privacy_page/personalization_opti
 index 50a3c35672..da855e05a0 100644
 --- a/chrome/browser/resources/settings/privacy_page/personalization_options.html
 +++ b/chrome/browser/resources/settings/privacy_page/personalization_options.html
-@@ -24,7 +24,7 @@
-
-     </style>
-
--<if expr="not is_chromeos">
-+<if expr="is_chromeos">
-     <div id="chromeSigninUserChoiceSetting" class="hr cr-row" role="group"
-         hidden="[[!chromeSigninUserChoiceInfo_.shouldShowSettings]]"
-         aria-label="$i18n{chromeSigninChoiceTitle}">
 @@ -64,7 +64,6 @@
          on-settings-boolean-control-change="onSigninAllowedChange_"
          no-set-pref>
@@ -39,10 +30,7 @@ index 50a3c35672..da855e05a0 100644
 diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui/webui/settings/settings_ui.cc
 --- a/chrome/browser/ui/webui/settings/settings_ui.cc
 +++ b/chrome/browser/ui/webui/settings/settings_ui.cc
-@@ -366,9 +366,7 @@
-   html_source->AddBoolean("isOSSettings", false);
- #endif  // BUILDFLAG(IS_CHROMEOS)
- 
+@@ -368,4 +368,2 @@
 -  bool show_privacy_guide =
 -      base::FeatureList::IsEnabled(features::kPrivacyGuideForceAvailable) ||
 -      (!ShouldDisplayManagedUi(profile) && !profile->IsChild());
@@ -50,20 +38,6 @@ diff --git a/chrome/browser/ui/webui/settings/settings_ui.cc b/chrome/browser/ui
    html_source->AddBoolean("showPrivacyGuide", show_privacy_guide);
  
  
-@@ -513,12 +511,7 @@
-       privacy_sandbox_service->IsRestrictedNoticeEnabled();
-   bool is_ad_privacy_ux_deprecation_enabled = base::FeatureList::IsEnabled(
-       privacy_sandbox::kPrivacySandboxAdPrivacyUxDeprecation);
--  bool is_ad_privacy_available = true;
--  if (is_ad_privacy_ux_deprecation_enabled) {
--    is_ad_privacy_available = false;
--  } else if (is_privacy_sandbox_restricted) {
--    is_ad_privacy_available = is_restricted_notice_enabled;
--  }
-+  bool is_ad_privacy_available = false;
- 
-   html_source->AddBoolean("isPrivacySandboxRestricted",
-                           is_privacy_sandbox_restricted);
 @@ -601,7 +594,6 @@
    bool glic_disallowed_by_admin = false;
  

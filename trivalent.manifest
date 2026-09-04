@@ -44,8 +44,8 @@ patches/third_party/vanadium/modified-disable-seed-based-field-trials.patch b211
 patches/trivalent/add-dark-mode-toolbar-toggle.patch e2ed4c8502a4c80296da2235017dd10a501825d4 adapted
 patches/trivalent/add-feature-to-toggle-middlemouse-copypaste.patch 2fc18a31b15ae28725a7f2895ed036908fcd0c3f adapted
 patches/trivalent/add-hide-profile-icon-feature.patch 71e163cebd200be05bdbec274275eb65a2b458af adapted
-patches/trivalent/add-incognito-prefs.patch 9a8081cc668e2185bf1a1518d23058febdbe5aad pristine
-patches/trivalent/dark-mode-skip-images-by-default.patch f00ed9236a08c8be9e309f425c9a42fcb2deb8aa pristine
+patches/trivalent/add-incognito-prefs.patch 9a8081cc668e2185bf1a1518d23058febdbe5aad adapted
+patches/trivalent/dark-mode-skip-images-by-default.patch f00ed9236a08c8be9e309f425c9a42fcb2deb8aa adapted
 patches/trivalent/disable-background-mode-by-default.patch 7f9ea257ad9927b0e0427b027abb5af2411f7337 dropped
 patches/trivalent/disable-disk-cache.patch d5d47901184e7eb89c540b044d6b36e0a3eac5f5 pristine
 patches/trivalent/disable-infobar-for-builds-without-api-key.patch bc67c171863a62b701d1de8c98b2ff49db9d3af8 dropped
@@ -67,11 +67,11 @@ patches/trivalent/privacy/disable-lens.patch e73c24fa216a0d0a0ba87f0aecb555f3b9b
 patches/trivalent/privacy/disable-metrics-reporting.patch f851e13818c0e363da34835ad4579df627d799bf pristine
 patches/trivalent/privacy/disable-promotions-by-default.patch 4131ec085bb40b29433801b0f2299f2f007c01ff pristine
 patches/trivalent/privacy/disable-protected-content.patch c7d1e749edb8994e23252191c92667208cb3b429 pristine
-patches/trivalent/privacy/disable-search-suggest-by-default.patch d0d5987a899ed753cd3ce838ed78eb47a5586e74 adapted
+patches/trivalent/privacy/disable-search-suggest-by-default.patch d0d5987a899ed753cd3ce838ed78eb47a5586e74 dropped
 patches/trivalent/privacy/disable-sync-by-default.patch 9a3fcd677c2298cc2837da42bf4a5612863b532e pristine
 patches/trivalent/search-config-improvements.patch 6fd57969713f86ceaf0e12c754d7e4cedab28d30 adapted
 patches/trivalent/search-selection.patch 75095c932191e6402683ee4b1f8ed531bb18a051 adapted
-patches/trivalent/security/add-feature-to-disable-pdf-javascript.patch c4270543d25c3f0f893b568b84008520cab3fd8b pristine
+patches/trivalent/security/add-feature-to-disable-pdf-javascript.patch c4270543d25c3f0f893b568b84008520cab3fd8b adapted
 patches/trivalent/security/add-feature-to-show-puny-code.patch 734715d7128b81fc5ca526598d48ad2466914ac6 pristine
 patches/trivalent/security/adjust-jit-controls.patch f92f9757bf1afcf67d64b6369e8da39be92f876f pristine
 patches/trivalent/security/block-external-extensions.patch 081a23cc47e2a1f9d50dab6ccb87238805fc04b0 pristine
@@ -85,7 +85,7 @@ patches/trivalent/security/disable-remote-access-by-default.patch b857b0924e6690
 patches/trivalent/security/disable-various-content-settings-by-default.patch 12efe480c3558a4e2b2e0435ff8bbc236fb64ee5 pristine
 patches/trivalent/security/enable-partitionalloc-advanced-checks.patch 620c5c9befe4182cb0265a89110dfe36150269d8 pristine
 patches/trivalent/security/enable-strict-extension-verification.patch c0e8d1a4ae611bacb8a261e141023ded0e98d4bd pristine
-patches/trivalent/security/extension-access-hardening.patch d5944ce080e440ebb27b3426ca37b2b0854d419d pristine
+patches/trivalent/security/extension-access-hardening.patch d5944ce080e440ebb27b3426ca37b2b0854d419d adapted
 patches/trivalent/security/isolate-sandboxed-iframes-by-document.patch a4b478db6d47308e9d3cf5fbffca4eb2a860d03c pristine
 patches/trivalent/security/network-service-sandbox-config.patch 09a3ea2da8b43ed41eaf12dfd5f3c320869d2253 pristine
 patches/trivalent/security/strict-popup-blocking.patch 0fe8ec7a04c04ee23daf6f8611f1ccb553c7686c pristine
@@ -108,7 +108,7 @@ patches/trivalent/linux/fix-singleton-hostname.patch 7267c14a519d6598cfca466d415
 patches/trivalent/linux/linux-gpu-sandbox.patch 716b3ecdb614fb88b94c75667a6e51d630fad614 pristine
 patches/trivalent/fixes/remove-sysroot-dependency.patch dc9c1a256f0c12952c6420e9405c4fb6662f5449 dropped
 patches/trivalent/fixes/use-cwd-for-gclient-path.patch 14b095e95225a4c041af27dabb9a3fbd891b66c8 dropped
-patches/trivalent/ugc/add-flag-to-scope-omnibox-autocomplete.patch 6aead17695aed00db8f59d3d6a970273a365d71c pristine
+patches/trivalent/ugc/add-flag-to-scope-omnibox-autocomplete.patch 6aead17695aed00db8f59d3d6a970273a365d71c adapted
 patches/third_party/vanadium/0228-Restriction-of-dynamic-code-execution-via-seccomp-bp.patch aaaf93c000cb786a27e58f9898a39c843e6390a2 pristine
 patches/third_party/vanadium/0164-Use-local-list-of-supported-languages-for-Language-s.patch b46fdedaa9dc8aae3cf583c9f546a19d6ac8e48f pristine
 patches/third_party/vanadium/0242-Further-disable-password-leak-detection-checks.patch a50ff742c7befe3a9f007b3faac00482e5c012f9 dropped

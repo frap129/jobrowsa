@@ -46,15 +46,14 @@ diff --git a/chrome/browser/profiles/profile.cc b/chrome/browser/profiles/profil
 index a490fefce8c79..1b071f5c7c571 100644
 --- a/chrome/browser/profiles/profile.cc
 +++ b/chrome/browser/profiles/profile.cc
-@@ -316,6 +316,8 @@ const char Profile::kProfileKey[] = "__PROFILE__";
- 
- // static
+@@ -337,5 +337,7 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
  void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
 +  registry->RegisterBooleanPref(prefs::kIncognitoLaunch, false);
 +  registry->RegisterBooleanPref(prefs::kIncognitoStartup, true);
    registry->RegisterBooleanPref(
        prefs::kSearchSuggestEnabled,
-       true,
+       false,
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 diff --git a/chrome/common/pref_names.h b/chrome/common/pref_names.h
 index 7f2ccebd7e..5e619fa2bf 100644
 --- a/chrome/common/pref_names.h

@@ -13,15 +13,13 @@ See the License for the specific language governing permissions and limitations 
 diff --git a/chrome/browser/ui/ui_features.cc b/chrome/browser/ui/ui_features.cc
 --- a/chrome/browser/ui/ui_features.cc
 +++ b/chrome/browser/ui/ui_features.cc
-@@ -264,7 +264,7 @@
- 
+@@ -269,5 +269,5 @@
  // Enables preview images in tab-hover cards.
  // https://crbug.com/41439486
 -BASE_FEATURE(kTabHoverCardImages, base::FEATURE_ENABLED_BY_DEFAULT);
 +BASE_FEATURE(kTabHoverCardImages, base::FEATURE_DISABLED_BY_DEFAULT);
  
- // Skips the synthetic tab selection event fired when a browser window is
- // activated.
+ BASE_FEATURE(kTabStripNewTabButtonFlickerFix, base::FEATURE_ENABLED_BY_DEFAULT);
 diff --git a/chrome/browser/sharing_hub/sharing_hub_features.cc b/chrome/browser/sharing_hub/sharing_hub_features.cc
 --- a/chrome/browser/sharing_hub/sharing_hub_features.cc
 +++ b/chrome/browser/sharing_hub/sharing_hub_features.cc

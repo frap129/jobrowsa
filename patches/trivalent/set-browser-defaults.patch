@@ -22,7 +22,7 @@ diff --git a/chrome/browser/ui/browser_ui_prefs.cc b/chrome/browser/ui/browser_u
    registry->RegisterListPref(prefs::kWebRTCIPHandlingUrl, base::ListValue());
    registry->RegisterBooleanPref(prefs::kWebRTCPostQuantumKeyAgreement, false);
    registry->RegisterStringPref(prefs::kWebRTCUDPPortRange, std::string());
-@@ -198,9 +198,16 @@
+@@ -198,6 +198,13 @@
 +  registry->RegisterBooleanPref(prefs::kWebRtcEventLogCollectionAllowed, false);
 +  registry->RegisterListPref(prefs::kWebRtcLocalIpsAllowedUrls);
 +  registry->RegisterBooleanPref(prefs::kWebRtcTextLogCollectionAllowed, false);

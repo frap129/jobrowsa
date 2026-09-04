@@ -65,7 +65,6 @@ trivalent/privacy/disable-lens.patch
 trivalent/privacy/disable-metrics-reporting.patch
 trivalent/privacy/disable-promotions-by-default.patch
 trivalent/privacy/disable-protected-content.patch
-trivalent/privacy/disable-search-suggest-by-default.patch
 trivalent/privacy/disable-sync-by-default.patch
 trivalent/search-config-improvements.patch
 trivalent/search-selection.patch

@@ -27,9 +27,7 @@ diff --git a/chrome/browser/resources/settings/privacy_page/privacy_page.html b/
 index ff64109f8e..5e52787032 100644
 --- a/chrome/browser/resources/settings/privacy_page/privacy_page.html
 +++ b/chrome/browser/resources/settings/privacy_page/privacy_page.html
-@@ -34,8 +34,8 @@
-         role-description="$i18n{subpageArrowRoleDescription}">
-     </cr-link-row>
+@@ -37,6 +37,6 @@
      <cr-link-row id="securityLinkRow" start-icon="[[getLockIcon_()]]"
 -        class="hr" label="$i18n{securityPageTitle}"
 -        sub-label="$i18n{securityPageDescription}"
