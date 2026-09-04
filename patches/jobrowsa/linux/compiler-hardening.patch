@@ -1,8 +1,6 @@
 --- a/build/config/compiler/BUILD.gn
 +++ b/build/config/compiler/BUILD.gn
-@@ -477,8 +477,15 @@ config("compiler") {
-     if (is_linux) {
-       cflags += [
+@@ -490,6 +490,13 @@ config("compiler") {
          "-fstack-clash-protection",
          "-mharden-sls=all",
        ]

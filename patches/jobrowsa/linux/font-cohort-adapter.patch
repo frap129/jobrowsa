@@ -2,26 +2,26 @@ Index: src/third_party/blink/renderer/core/helium_noise/build.gni
 ===================================================================
 --- src.orig/third_party/blink/renderer/core/helium_noise/build.gni
 +++ src/third_party/blink/renderer/core/helium_noise/build.gni
-@@ -16,6 +16,12 @@ blink_core_sources_helium_noise = [
+Index: src/third_party/blink/renderer/core/helium_noise/build.gni
+===================================================================
+--- src.orig/third_party/blink/renderer/core/helium_noise/build.gni
++++ src/third_party/blink/renderer/core/helium_noise/build.gni
+@@ -13,6 +13,8 @@ blink_core_sources_helium_noise = [
+   "text_policy.h",
    "font_cohort.cc",
    "font_cohort.h",
- ]
-+if (is_linux) {
-+  blink_core_sources_helium_noise += [
-+    "linux/font_cohort_linux.cc",
-+    "linux/font_cohort_linux.h",
-+  ]
-+}
- 
- blink_core_tests_helium_noise = [
-   "helium_noise_profile_test.cc",
-@@ -24,3 +30,6 @@ blink_core_tests_helium_noise = [
++  "linux/font_cohort_linux.cc",
++  "linux/font_cohort_linux.h",
+   "geometry_policy.cc",
+   "geometry_policy.h",
+   "geometry_adapter.cc",
+@@ -26,5 +26,6 @@ blink_core_tests_helium_noise = [
+   "webgl_capability_policy_test.cc",
    "text_policy_test.cc",
    "font_cohort_test.cc",
++  "linux/font_cohort_linux_test.cc",
+   "geometry_policy_test.cc",
  ]
-+if (is_linux) {
-+  blink_core_tests_helium_noise += [ "linux/font_cohort_linux_test.cc" ]
-+}
 Index: src/third_party/blink/renderer/core/helium_noise/font_cohort.cc
 ===================================================================
 --- src.orig/third_party/blink/renderer/core/helium_noise/font_cohort.cc

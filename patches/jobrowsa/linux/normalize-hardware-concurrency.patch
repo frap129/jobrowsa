@@ -1,17 +1,13 @@
 --- a/chrome/browser/helium_flag_entries.h
 +++ b/chrome/browser/helium_flag_entries.h
-@@ -44,9 +44,8 @@
-      "fingerprinting. Helium flag.",
-      kOsAll, FEATURE_VALUE_TYPE(blink::features::kHeliumNoiseAudio)},
+@@ -46,6 +46,5 @@
      {helium::kHeliumNoiseCpuCoresCommandLine,
--     "[Helium Noise] Randomize number of CPU cores",
+      "[Helium Noise] Randomize number of CPU cores",
 -     "Randomizes the number of cores returned by "
 -     "`navigator.hardwareConcurrency` in a reasonable range. Helium flag.",
-+     "[Helium Noise] Normalize CPU and device memory profile",
 +     "Reports a capability-safe CPU and device-memory profile. Helium flag.",
       kOsAll, FEATURE_VALUE_TYPE(blink::features::kHeliumNoiseCpuCores)},
-     // core/network
-     {helium::kDisableEchCommandLine, "Disable Encrypted Client Hello (ECH)",
+     {helium::kHeliumNoiseWebGLCommandLine,
 --- a/third_party/blink/renderer/core/execution_context/navigator_base.cc
 +++ b/third_party/blink/renderer/core/execution_context/navigator_base.cc
 @@ -4,8 +4,12 @@
