@@ -10,35 +10,38 @@ Unless required by applicable law or agreed to in writing, software distributed 
 distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and limitations under the License.
 ---
-diff --git a/chrome/browser/ui/ui_features.cc
+diff --git a/chrome/browser/ui/ui_features.cc b/chrome/browser/ui/ui_features.cc
 --- a/chrome/browser/ui/ui_features.cc
 +++ b/chrome/browser/ui/ui_features.cc
-@@ -30,3 +30,4 @@ bool IsProcessOverheadExperimentActive() {
+@@ -28,6 +28,7 @@
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ 
  namespace features {
 +BASE_FEATURE(kHideProfileIcon, base::FEATURE_DISABLED_BY_DEFAULT);
  
  // Controls the confirmation shown before opening many bookmarks at once.
+ BASE_FEATURE(kBookmarkOpenAllConfirmation, base::FEATURE_ENABLED_BY_DEFAULT);
 diff --git a/chrome/browser/ui/ui_features.h b/chrome/browser/ui/ui_features.h
 index 5588ad208d..b72a395db3 100644
 --- a/chrome/browser/ui/ui_features.h
 +++ b/chrome/browser/ui/ui_features.h
 @@ -16,6 +16,8 @@
-
+ 
  namespace features {
-
+ 
 +BASE_DECLARE_FEATURE(kHideProfileIcon);
 +
  // All features in alphabetical order. The features should be documented
  // alongside the definition of their values in the .cc file.
-
+ 
 diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
 --- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
 +++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
-@@ -683,6 +683,10 @@
+@@ -676,6 +676,10 @@
      else if (sab_value == "never")
        show_avatar_toolbar_button = false;
  
-+    if (browser_->profile()->IsRegularProfile())
++    if (browser_->GetProfile()->IsRegularProfile())
 +      show_avatar_toolbar_button = show_avatar_toolbar_button &&
 +                     !base::FeatureList::IsEnabled(features::kHideProfileIcon);
 +
