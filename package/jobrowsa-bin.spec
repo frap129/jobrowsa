@@ -21,8 +21,9 @@ Provides: www-browser
 Recommends: ca-certificates, xdg-utils
 %if 0%{?debbuild}
 Recommends: fonts-liberation, libvulkan1
+Depends: libpipewire-0.3-0
 %else
-Recommends: liberation-fonts, vulkan-loader
+Recommends: liberation-fonts, vulkan-loader, pipewire
 %endif
 
 %description
