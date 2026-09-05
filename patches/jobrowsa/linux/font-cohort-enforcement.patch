@@ -1,0 +1,445 @@
+Index: src/third_party/blink/renderer/platform/BUILD.gn
+--- src.orig/third_party/blink/renderer/platform/BUILD.gn
++++ src/third_party/blink/renderer/platform/BUILD.gn
+@@ -661,6 +661,8 @@
+     "fonts/font_baseline.h",
+     "fonts/font_cache.cc",
+     "fonts/font_cache.h",
++    "fonts/font_cohort_runtime.cc",
++    "fonts/font_cohort_runtime.h",
+     "fonts/font_cache_client.h",
+     "fonts/font_cache_key.h",
+     "fonts/font_custom_platform_data.cc",
+Index: src/third_party/blink/renderer/platform/fonts/font_cohort_runtime.h
+--- /dev/null
++++ src/third_party/blink/renderer/platform/fonts/font_cohort_runtime.h
+@@ -0,0 +1,58 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_FONTS_FONT_COHORT_RUNTIME_H_
++#define THIRD_PARTY_BLINK_RENDERER_PLATFORM_FONTS_FONT_COHORT_RUNTIME_H_
++
++#include <atomic>
++
++#include <unicode/uchar.h>
++
++#include "base/no_destructor.h"
++#include "base/synchronization/lock.h"
++#include "third_party/blink/renderer/platform/platform_export.h"
++#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
++#include "third_party/blink/renderer/platform/wtf/vector.h"
++
++namespace blink {
++namespace helium_noise {
++
++// Process-global cohort state for platform-layer font code, which cannot see
++// the core FontCohortResolver. Populated once by core when the first resolver
++// is created; inert (fail-open) until then. Thread-safe: fallback lookups can
++// run on worker threads concurrently with population.
++//
++// Relies on Chromium's one-browser-profile-per-renderer invariant: all
++// ExecutionContexts in a renderer process derive the same cohort, so one
++// snapshot is valid for the process lifetime.
++class PLATFORM_EXPORT FontCohortRuntime {
++ public:
++  static FontCohortRuntime& Instance();
++
++  FontCohortRuntime(const FontCohortRuntime&) = delete;
++  FontCohortRuntime& operator=(const FontCohortRuntime&) = delete;
++
++  bool IsActive() const;
++  void Populate(Vector<String> allowed_names);
++  bool Allows(const String& name) const;
++  // Fixed script/block mapping (spec): Hiragana/Katakana/Han -> Noto Sans CJK
++  // JP, emoji -> Noto Color Emoji. Hangul deliberately unmapped (fail-open
++  // rather than wrong JP glyph variants). Returns nullptr when unmapped or
++  // inactive.
++  const char* CanonicalFallbackForCharacter(UChar32 c) const;
++
++ private:
++  friend class base::NoDestructor<FontCohortRuntime>;
++  FontCohortRuntime() = default;
++
++  // Guarded by lock_; read lock-free after the release store of active_.
++  base::Lock lock_;
++  Vector<String> allowed_names_ GUARDED_BY(lock_);
++  std::atomic<bool> active_{false};
++};
++
++}  // namespace helium_noise
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_FONTS_FONT_COHORT_RUNTIME_H_
+Index: src/third_party/blink/renderer/platform/fonts/font_cohort_runtime.cc
+--- /dev/null
++++ src/third_party/blink/renderer/platform/fonts/font_cohort_runtime.cc
+@@ -0,0 +1,100 @@
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "third_party/blink/renderer/platform/fonts/font_cohort_runtime.h"
++
++#include <unicode/uchar.h>
++#include <unicode/uscript.h>
++
++#include "third_party/blink/renderer/platform/text/character.h"
++
++namespace blink {
++namespace helium_noise {
++
++namespace {
++
++constexpr const char kCjkCanonical[] = "Noto Sans CJK JP";
++constexpr const char kEmojiCanonical[] = "Noto Color Emoji";
++
++bool EqualIgnoringAsciiCase(const String& a, const String& b) {
++  if (a.length() != b.length()) {
++    return false;
++  }
++  for (wtf_size_t i = 0; i < a.length(); ++i) {
++    UChar ca = a[i];
++    UChar cb = b[i];
++    if (ca >= 'A' && ca <= 'Z') {
++      ca += 'a' - 'A';
++    }
++    if (cb >= 'A' && cb <= 'Z') {
++      cb += 'a' - 'A';
++    }
++    if (ca != cb) {
++      return false;
++    }
++  }
++  return true;
++}
++
++}  // namespace
++
++FontCohortRuntime& FontCohortRuntime::Instance() {
++  static base::NoDestructor<FontCohortRuntime> instance;
++  return *instance;
++}
++
++bool FontCohortRuntime::IsActive() const {
++  return active_.load(std::memory_order_acquire);
++}
++
++void FontCohortRuntime::Populate(Vector<String> allowed_names) {
++  if (allowed_names.empty()) {
++    return;
++  }
++  base::AutoLock lock(lock_);
++  if (active_.load(std::memory_order_relaxed)) {
++    return;
++  }
++  allowed_names_ = std::move(allowed_names);
++  active_.store(true, std::memory_order_release);
++}
++
++bool FontCohortRuntime::Allows(const String& name) const {
++  if (!IsActive() || name.empty()) {
++    return false;
++  }
++  base::AutoLock lock(lock_);
++  for (const String& allowed : allowed_names_) {
++    if (EqualIgnoringAsciiCase(allowed, name)) {
++      return true;
++    }
++  }
++  return false;
++}
++
++const char* FontCohortRuntime::CanonicalFallbackForCharacter(UChar32 c) const {
++  if (!IsActive()) {
++    return nullptr;
++  }
++  if (Character::IsEmoji(c) || Character::IsEmojiIncludingReserved(c)) {
++    return kEmojiCanonical;
++  }
++  UErrorCode err = U_ZERO_ERROR;
++  UScriptCode script = uscript_getScript(c, &err);
++  if (U_SUCCESS(err)) {
++    if (script == USCRIPT_HIRAGANA || script == USCRIPT_KATAKANA ||
++        script == USCRIPT_KATAKANA_OR_HIRAGANA || script == USCRIPT_HAN ||
++        script == USCRIPT_HAN_WITH_BOPOMOFO) {
++      return kCjkCanonical;
++    }
++  }
++  // Compatibility ideographs can report USCRIPT_COMMON.
++  if (script == USCRIPT_COMMON && Character::IsIdeographic(c)) {
++    return kCjkCanonical;
++  }
++  return nullptr;
++}
++
++}  // namespace helium_noise
++}  // namespace blink
+Index: src/third_party/blink/renderer/core/helium_noise/font_cohort.h
+--- src.orig/third_party/blink/renderer/core/helium_noise/font_cohort.h
++++ src/third_party/blink/renderer/core/helium_noise/font_cohort.h
+@@ -71,6 +71,11 @@
+   Vector<uint8_t> selected_;
+ };
+ 
++// Maps any allowed name (primary or alias) to the selected identity's primary
++// family name. Empty result when |name| matches no selected identity.
++CORE_EXPORT AtomicString ResolveToPrimary(const FontCohortResolver& resolver,
++                                          const AtomicString& name);
++
+ // Test-only scoped availability seam. Production availability probing is
+ // injected by the platform adapter (Task 6); until then the probe returns
+ // empty and every seam stays native. Never reachable from renderer input.
+Index: src/third_party/blink/renderer/core/helium_noise/font_cohort.cc
+--- src.orig/third_party/blink/renderer/core/helium_noise/font_cohort.cc
++++ src/third_party/blink/renderer/core/helium_noise/font_cohort.cc
+@@ -17,6 +17,7 @@
+ #include "third_party/blink/renderer/core/helium_noise/helium_noise_hash.h"
+ #include "third_party/blink/renderer/core/helium_noise/helium_noise_profile.h"
+ #include "third_party/blink/renderer/platform/fonts/font_cache.h"
++#include "third_party/blink/renderer/platform/fonts/font_cohort_runtime.h"
+ #if BUILDFLAG(IS_LINUX)
+ #include "third_party/blink/renderer/core/helium_noise/linux/font_cohort_linux.h"
+ #endif
+@@ -49,6 +50,20 @@
+   return *probe;
+ }
+ 
++void PopulateFontCohortRuntime(const FontCohortResolver& resolver) {
++  Vector<String> allowed_names;
++  for (const uint8_t index : resolver.selected_) {
++    const FontIdentity& identity = ApprovedFontIdentities()[index];
++    allowed_names.push_back(String::FromUtf8(identity.primary));
++    for (const char* alias : identity.aliases) {
++      if (alias[0] != '\0') {
++        allowed_names.push_back(String::FromUtf8(alias));
++      }
++    }
++  }
++  FontCohortRuntime::Instance().Populate(std::move(allowed_names));
++}
++
+ bool EqualIgnoringAsciiCase(const char* a, const String& b) {
+   if (!a) {
+     return false;
+@@ -211,6 +226,25 @@
+   return AtomicString(ApprovedFontIdentities()[candidates.front()].primary);
+ }
+ 
++AtomicString ResolveToPrimary(const FontCohortResolver& resolver,
++                              const AtomicString& name) {
++  if (name.empty()) {
++    return AtomicString();
++  }
++  for (const uint8_t index : resolver.selected_) {
++    const FontIdentity& identity = ApprovedFontIdentities()[index];
++    if (EqualIgnoringAsciiCase(identity.primary, name)) {
++      return AtomicString(identity.primary);
++    }
++    for (const char* alias : identity.aliases) {
++      if (alias[0] != '\0' && EqualIgnoringAsciiCase(alias, name)) {
++        return AtomicString(identity.primary);
++      }
++    }
++  }
++  return AtomicString();
++}
++
+ ScopedFontCohortAvailabilityForTesting::ScopedFontCohortAvailabilityForTesting(
+     Probe probe)
+     : previous_probe_(std::move(AvailabilityProbe())) {
+@@ -235,16 +269,24 @@
+   }
+ #if BUILDFLAG(IS_LINUX)
+   if (AvailabilityProbe().is_null()) {
+-    return FontCohortResolver::Create(
++    auto resolver = FontCohortResolver::Create(
+         profile->Hash(ProfileDomain::kFont),
+         ProbeAvailableFontIdentitiesLinux(&FontCache::Get()));
++    if (resolver) {
++      PopulateFontCohortRuntime(*resolver);
++    }
++    return resolver;
+   }
+ #endif
+   Vector<uint8_t> available =
+       AvailabilityProbe().is_null() ? Vector<uint8_t>()
+                                     : AvailabilityProbe().Run();
+-  return FontCohortResolver::Create(
+-      profile->Hash(ProfileDomain::kFont), available);
++  auto resolver =
++      FontCohortResolver::Create(profile->Hash(ProfileDomain::kFont), available);
++  if (resolver) {
++    PopulateFontCohortRuntime(*resolver);
++  }
++  return resolver;
+ }
+ #include "build/build_config.h"
+ 
+Index: src/third_party/blink/renderer/core/css/css_font_selector.cc
+--- src.orig/third_party/blink/renderer/core/css/css_font_selector.cc
++++ src/third_party/blink/renderer/core/css/css_font_selector.cc
+@@ -248,19 +248,52 @@
+   // handed the generic font family name.
+   AtomicString settings_family_name =
+       FamilyNameFromSettings(request_description, font_family);
+-  if (settings_family_name.empty()) {
+-    return nullptr;
+-  }
+ 
+   // System/generic resolution goes through the cohort after document
+-  // @font-face lookup; an unresolvable named family fails open.
++  // @font-face lookup. Named families must also be cohort-gated here:
++  // resolving them to nullptr would let FontFallbackList call FontCache
++  // directly with the raw name, bypassing the cohort entirely.
+   if (auto resolver = helium_noise::GetFontCohortResolver(GetExecutionContext())) {
+-    settings_family_name = resolver->Resolve(
+-        helium_noise::ToFontGenericClass(request_description.GenericFamily()),
+-        settings_family_name);
+-    if (settings_family_name.empty()) {
+-      return nullptr;
++    if (font_family.FamilyIsGeneric()) {
++      if (settings_family_name.empty()) {
++        return nullptr;
++      }
++      settings_family_name = resolver->Resolve(
++          helium_noise::ToFontGenericClass(request_description.GenericFamily()),
++          settings_family_name);
++      if (settings_family_name.empty()) {
++        return nullptr;
++      }
++    } else {
++      // Named family: resolve alias/primary through the cohort, falling back
++      // to the class substitute. Returns nullptr only when the cohort is
++      // degenerate (no installed font of this class at all): fail open by
++      // spec, matching the resolver-null path.
++      AtomicString primary = helium_noise::ResolveToPrimary(*resolver, family_name);
++      if (primary.empty()) {
++        AtomicString substitute = resolver->Resolve(
++            helium_noise::ToFontGenericClass(request_description.GenericFamily()),
++            AtomicString());
++        if (substitute.empty()) {
++          return nullptr;
++        }
++        return FontCache::Get().GetFontData(request_description, substitute);
++      }
++      const SimpleFontData* font_data =
++          FontCache::Get().GetFontData(request_description, primary);
++      if (!font_data) {
++        AtomicString substitute = resolver->Resolve(
++            helium_noise::ToFontGenericClass(request_description.GenericFamily()),
++            AtomicString());
++        if (substitute.empty()) {
++          return nullptr;
++        }
++        return FontCache::Get().GetFontData(request_description, substitute);
++      }
++      return font_data;
+     }
++  } else if (settings_family_name.empty()) {
++    return nullptr;
+   }
+ 
+   const SimpleFontData* font_data =
+Index: src/third_party/blink/renderer/core/css/offscreen_font_selector.cc
+--- src.orig/third_party/blink/renderer/core/css/offscreen_font_selector.cc
++++ src/third_party/blink/renderer/core/css/offscreen_font_selector.cc
+@@ -49,19 +49,47 @@
+   // handed the generic font family name.
+   AtomicString settings_family_name =
+       FamilyNameFromSettings(font_description, font_family);
+-  if (settings_family_name.empty()) {
+-    return nullptr;
+-  }
+ 
+   // The worker owns its execution-context profile, so OffscreenCanvas
+-  // inherits the worker token map through its own context.
++  // inherits the worker token map through its own context. Named families
++  // are cohort-gated here exactly as in CSSFontSelector.
+   if (auto resolver = helium_noise::GetFontCohortResolver(GetExecutionContext())) {
+-    settings_family_name = resolver->Resolve(
+-        helium_noise::ToFontGenericClass(font_description.GenericFamily()),
+-        settings_family_name);
+-    if (settings_family_name.empty()) {
+-      return nullptr;
++    if (font_family.FamilyIsGeneric()) {
++      if (settings_family_name.empty()) {
++        return nullptr;
++      }
++      settings_family_name = resolver->Resolve(
++          helium_noise::ToFontGenericClass(font_description.GenericFamily()),
++          settings_family_name);
++      if (settings_family_name.empty()) {
++        return nullptr;
++      }
++    } else {
++      AtomicString primary = helium_noise::ResolveToPrimary(*resolver, family_name);
++      if (primary.empty()) {
++        AtomicString substitute = resolver->Resolve(
++            helium_noise::ToFontGenericClass(font_description.GenericFamily()),
++            AtomicString());
++        if (substitute.empty()) {
++          return nullptr;
++        }
++        return FontCache::Get().GetFontData(font_description, substitute);
++      }
++      const SimpleFontData* font_data =
++          FontCache::Get().GetFontData(font_description, primary);
++      if (!font_data) {
++        AtomicString substitute = resolver->Resolve(
++            helium_noise::ToFontGenericClass(font_description.GenericFamily()),
++            AtomicString());
++        if (substitute.empty()) {
++          return nullptr;
++        }
++        return FontCache::Get().GetFontData(font_description, substitute);
++      }
++      return font_data;
+     }
++  } else if (settings_family_name.empty()) {
++    return nullptr;
+   }
+ 
+   return FontCache::Get().GetFontData(font_description, settings_family_name);
+Index: src/third_party/blink/renderer/platform/fonts/linux/font_cache_linux.cc
+--- src.orig/third_party/blink/renderer/platform/fonts/linux/font_cache_linux.cc
++++ src/third_party/blink/renderer/platform/fonts/linux/font_cache_linux.cc
+@@ -27,6 +27,7 @@
+ #include "build/build_config.h"
+ #include "third_party/blink/public/platform/linux/web_sandbox_support.h"
+ #include "third_party/blink/public/platform/platform.h"
++#include "third_party/blink/renderer/platform/fonts/font_cohort_runtime.h"
+ #include "third_party/blink/renderer/platform/fonts/font_fallback_priority.h"
+ #include "third_party/blink/renderer/platform/fonts/font_platform_data.h"
+ #include "third_party/blink/renderer/platform/fonts/simple_font_data.h"
+@@ -96,6 +97,29 @@
+     return nullptr;
+   }
+ 
++  // Cohort enforcement: when active, a fontconfig fallback outside the
++  // allowed set is replaced by the canonical family for this character's
++  // script. Inactive, unmapped script, or uninstalled canonical -> stock
++  // result (fail-open).
++  if (helium_noise::FontCohortRuntime::Instance().IsActive()) {
++    const String returned_family = String::FromUtf8(fallback_font.name);
++    if (!helium_noise::FontCohortRuntime::Instance().Allows(returned_family)) {
++      if (const char* canonical =
++              helium_noise::FontCohortRuntime::Instance()
++                  .CanonicalFallbackForCharacter(c)) {
++        FontFaceCreationParams canonical_params(
++            AtomicString::FromUtf8(canonical));
++        if (const FontPlatformData* canonical_platform_data =
++                GetFontPlatformData(font_description, canonical_params)) {
++          return FontDataFromFontPlatformData(
++              MakeGarbageCollected<FontPlatformData>(*canonical_platform_data));
++        }
++        // Canonical family not installed: fall through to the fontconfig
++        // result below (fail-open).
++      }
++    }
++  }
++
+   FontFaceCreationParams creation_params;
+   creation_params = FontFaceCreationParams(
+       fallback_font.filepath.value(), fallback_font.fontconfig_interface_id,
