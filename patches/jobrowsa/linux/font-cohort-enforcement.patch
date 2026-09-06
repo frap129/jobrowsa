@@ -63,7 +63,7 @@ Index: src/third_party/blink/renderer/platform/fonts/font_cohort_runtime.h
 +  FontCohortRuntime() = default;
 +
 +  // Guarded by lock_; read lock-free after the release store of active_.
-+  base::Lock lock_;
++  mutable base::Lock lock_;
 +  Vector<String> allowed_names_ GUARDED_BY(lock_);
 +  std::atomic<bool> active_{false};
 +};
