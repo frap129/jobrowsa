@@ -76,6 +76,7 @@ Container mechanics:
 - Use four-space indentation in shell code and two-space structural indentation in GitHub Actions YAML.
 - Explain constraints and non-obvious reasons in comments; do not narrate mechanics.
 - Preserve target-file formatting and unrelated context in quilt patches. New patch files use lowercase kebab-case with a `.patch` suffix and must be listed in the appropriate `series` file.
+- Patches should never include a test. Tests exist outside of patches.
 - Preserve provenance and required license headers.
 - Send shell warnings and validation errors to stderr. Do not mask build, patch, packaging, or test failures; use `|| true` only for explicitly best-effort cleanup.
 
