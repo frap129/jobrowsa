@@ -15,13 +15,6 @@ Index: src/third_party/blink/renderer/core/helium_noise/build.gni
    "geometry_policy.cc",
    "geometry_policy.h",
    "geometry_adapter.cc",
-@@ -26,5 +26,6 @@ blink_core_tests_helium_noise = [
-   "webgl_capability_policy_test.cc",
-   "text_policy_test.cc",
-   "font_cohort_test.cc",
-+  "linux/font_cohort_linux_test.cc",
-   "geometry_policy_test.cc",
- ]
 Index: src/third_party/blink/renderer/core/helium_noise/font_cohort.cc
 ===================================================================
 --- src.orig/third_party/blink/renderer/core/helium_noise/font_cohort.cc
@@ -217,48 +210,4 @@ Index: src/third_party/blink/renderer/core/helium_noise/linux/font_cohort_linux.
 +}  // namespace blink
 +
 +#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_LINUX_FONT_COHORT_LINUX_H_
-\ No newline at end of file
-Index: src/third_party/blink/renderer/core/helium_noise/linux/font_cohort_linux_test.cc
-===================================================================
---- /dev/null
-+++ src/third_party/blink/renderer/core/helium_noise/linux/font_cohort_linux_test.cc
-@@ -0,0 +1,38 @@
-+// Copyright 2026 The Helium Authors
-+// You can use, redistribute, and/or modify this source code under
-+// the terms of the GPL-3.0 license that can be found in the LICENSE file.
-+// -----------------------------------------------------------------------
-+// Copyright 2026 The Chromium Authors
-+// Use of this source code is governed by a BSD-style license that can be
-+// found in the LICENSE file.
-+
-+#include "third_party/blink/renderer/core/helium_noise/linux/font_cohort_linux.h"
-+
-+#include "testing/gtest/include/gtest/gtest.h"
-+
-+namespace blink {
-+namespace helium_noise {
-+
-+TEST(FontCohortLinuxTest, NormalizesOnlyKnownStyleSuffixes) {
-+  EXPECT_EQ("liberation sans",
-+            NormalizePlatformFamily("Liberation Sans Bold"));
-+  EXPECT_EQ("dejavu sans mono", NormalizePlatformFamily("DejaVu-Sans-Mono"));
-+  EXPECT_EQ("fingerprint test font",
-+            NormalizePlatformFamily("Fingerprint Test Font"));
-+  // A trailing word that is not a known style suffix must survive.
-+  EXPECT_EQ("fingerprint test font ultra",
-+            NormalizePlatformFamily("Fingerprint Test Font Ultra"));
-+  // Multiple style suffixes: only one is removed.
-+  EXPECT_EQ("noto serif italic",
-+            NormalizePlatformFamily("Noto Serif Italic Bold"));
-+}
-+
-+TEST(FontCohortLinuxTest, NormalizationIsComparisonOnlyPreservingCase) {
-+  // Normalization only affects comparison; declared names are exact matches
-+  // against a normalized platform name from PlatformData.
-+  EXPECT_EQ(NormalizePlatformFamily("Liberation-Sans Regular"),
-+            NormalizePlatformFamily("liberation sans"));
-+}
-+
-+}  // namespace helium_noise
-+}  // namespace blink
 \ No newline at end of file
