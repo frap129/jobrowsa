@@ -1,0 +1,192 @@
+Windows 11 x64 platform/UA identity
+
+When the shared Windows-identity gate (kHeliumNoise AND
+kHeliumNoiseWindowsIdentity AND Linux, via
+blink::helium_noise::IsWindowsIdentityEnabled()) is on, every
+platform/UA surface presents one coherent Windows 11 x86_64
+stock-Chromium identity instead of the honest Linux one:
+
+- navigator.userAgent, navigator.appVersion (derived from the UA
+  string), and the User-Agent request header report the Windows 11
+  x64 reduced user agent, via the single browser-process seam in
+  components/embedder_support/user_agent_utils.cc that produces the
+  UA string and UserAgentMetadata for windows and workers alike
+  (workers inherit both from the renderer/browser metadata).
+- navigator.userAgentData and the Sec-CH-UA-* request headers report
+  platform "Windows", the pinned Windows 11 platform version,
+  architecture "x86", bitness "64", mobile false, wow64 false, at
+  every return path of GetUserAgentMetadata (low-entropy,
+  reduced-UA-derived, and full high-entropy). Brand version lists
+  keep their stock Chromium values: they are browser-version data,
+  not OS data.
+- navigator.platform reports Win32 in windows and workers through
+  the shared NavigatorBase::platform(); the DevTools platform
+  override keeps its precedence in Navigator::platform(), which
+  reads the override first.
+
+The Windows platform version is pinned to 19.0.0, derived from the
+pinned Chromium 152's own Windows platform-version logic: the
+highest known UniversalApiContract version is 19
+(kHighestKnownUniversalApiContractVersion in user_agent_utils.cc),
+and Chromium falls back to it whenever the WellKnownContracts
+registry read fails, so 19.0.0 is the modal value a stock Chromium
+152 on Windows 11 reports.
+
+Command-line (--user-agent) and DevTools UA/metadata overrides keep
+their existing precedence: the command-line override is consulted
+before the identity in GetUserAgent()/GetUserAgentMetadata(), and
+DevTools overrides are applied downstream of this seam. Any gate
+failure (master off, subfeature off, unsupported platform) returns
+exact stock Linux values; there is no partial identity.
+
+arm64 decision: the identity is presented on arm64 Linux builds as
+well. The identity is an x86_64 identity by hardcoded design, and an
+arm64 Linux desktop cohort is negligibly small next to the Windows
+11 x64 anonymity set the identity targets; exposing "arm Linux"
+would defeat the blend. IsWindowsIdentityPlatformSupported() in the
+shared gate header already returns true on all Linux targets, so no
+change is needed there.
+--- a/components/embedder_support/user_agent_utils.cc
++++ b/components/embedder_support/user_agent_utils.cc
+@@ -33,6 +33,7 @@
+ #include "components/version_info/version_info.h"
+ #include "net/http/http_util.h"
+ #include "third_party/blink/public/common/features.h"
++#include "third_party/blink/public/common/helium_noise/windows_identity.h"
+ #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+ 
+ #if BUILDFLAG(IS_WIN)
+@@ -208,9 +209,24 @@
+                                additional_brand_version);
+ }
+ 
+-// Internal function to handle return the full or "reduced" user agent string,
+-// depending on the Reduce User-Agent reduction phase features.
+-std::string GetUserAgentInternal() {
++#if BUILDFLAG(IS_LINUX)
++// The pinned Windows 11 x86_64 identity that replaces platform-derived
++// fields when the shared Windows-identity gate is on. The platform version
++// is derived from the pinned Chromium's own Windows logic: the highest
++// known UniversalApiContract version (19) is the fallback value a stock
++// Chromium reports on Windows 11 whenever the WellKnownContracts registry
++// read is unavailable, so 19.0.0 is the modal Windows 11 value.
++constexpr char kWindowsIdentityUnifiedPlatform[] =
++    "Windows NT 10.0; Win64; x64";
++constexpr char kWindowsIdentityPlatform[] = "Windows";
++constexpr char kWindowsIdentityPlatformVersion[] = "19.0.0";
++constexpr char kWindowsIdentityArchitecture[] = "x86";
++constexpr char kWindowsIdentityBitness[] = "64";
++#endif  // BUILDFLAG(IS_LINUX)
++
++// Internal function to compute the product token of the user agent string,
++// shared by the full/reduced and Windows-identity assembly paths.
++std::string GetUserAgentProduct() {
+   std::string product = GetProductAndVersion();
+   if (base::CommandLine::ForCurrentProcess()->HasSwitch(kHeadless)) {
+     product.insert(0, "Headless");
+@@ -222,10 +238,23 @@
+   }
+ #endif
+ 
++  return product;
++}
++
++// Internal function to handle return the full or "reduced" user agent string,
++// depending on the Reduce User-Agent reduction phase features.
++std::string GetUserAgentInternal() {
+   return ShouldSendUserAgentUnifiedPlatform()
+-             ? BuildUnifiedPlatformUserAgentFromProduct(product)
+-             : BuildUserAgentFromProduct(product);
++             ? BuildUnifiedPlatformUserAgentFromProduct(GetUserAgentProduct())
++             : BuildUserAgentFromProduct(GetUserAgentProduct());
++}
++
++#if BUILDFLAG(IS_LINUX)
++std::string GetWindowsIdentityUserAgent() {
++  return BuildUserAgentFromOSAndProduct(kWindowsIdentityUnifiedPlatform,
++                                        GetUserAgentProduct());
+ }
++#endif
+ 
+ // Generate random order list based on the input size and seed.
+ // Manually implement a stable permutation shuffle since STL random number
+@@ -465,6 +494,14 @@
+     return custom_ua.value();
+   }
+ 
++#if BUILDFLAG(IS_LINUX)
++  // Command-line overrides keep precedence (handled above); the Windows
++  // identity replaces only the platform-derived fields of the UA string.
++  if (blink::helium_noise::IsWindowsIdentityEnabled()) {
++    return GetWindowsIdentityUserAgent();
++  }
++#endif
++
+   return GetUserAgentInternal();
+ }
+ 
+@@ -652,6 +689,24 @@
+       GetUserAgentBrandMajorVersionListInternal(std::nullopt);
+   metadata.mobile = GetMobileBitForUAMetadata();
+   metadata.platform = GetPlatformForUAMetadata();
++#if BUILDFLAG(IS_LINUX)
++  // The Windows identity replaces platform-derived metadata fields only;
++  // brand version lists keep their stock Chromium values. Command-line and
++  // DevTools overrides keep precedence: the custom-UA early return above
++  // already bypassed this path, and DevTools metadata overrides are applied
++  // downstream of this seam. Applied before every early return below so no
++  // return path (kClientHintsLowEntropyOnly, kClientHintsFromReducedUA,
++  // or the full high-entropy fill) leaks the native Linux identity.
++  if (blink::helium_noise::IsWindowsIdentityEnabled()) {
++    metadata.mobile = false;
++    metadata.platform = kWindowsIdentityPlatform;
++    metadata.architecture = kWindowsIdentityArchitecture;
++    metadata.bitness = kWindowsIdentityBitness;
++    metadata.wow64 = false;
++    metadata.platform_version = kWindowsIdentityPlatformVersion;
++    metadata.model = std::string();
++  }
++#endif
+ 
+   // For users providing a valid user-agent override via the command line:
+   // If kUACHOverrideBlank is enabled, set user-agent metadata with the
+@@ -708,6 +763,16 @@
+   metadata.bitness = GetCpuBitness();
+   metadata.wow64 = IsWoW64();
+   metadata.platform_version = GetPlatformVersion();
++#if BUILDFLAG(IS_LINUX)
++  // The high-entropy re-assignments above are unconditional, so re-apply the
++  // identity to keep every high-entropy field on the Windows profile.
++  if (blink::helium_noise::IsWindowsIdentityEnabled()) {
++    metadata.architecture = kWindowsIdentityArchitecture;
++    metadata.bitness = kWindowsIdentityBitness;
++    metadata.wow64 = false;
++    metadata.platform_version = kWindowsIdentityPlatformVersion;
++  }
++#endif
+   return metadata;
+ }
+ 
+--- a/third_party/blink/renderer/core/execution_context/navigator_base.cc
++++ b/third_party/blink/renderer/core/execution_context/navigator_base.cc
+@@ -11,6 +11,7 @@
+ #include "third_party/blink/public/common/device_memory/approximated_device_memory.h"
+ #include "third_party/blink/public/common/device_memory/hardware_profile.h"
+ #include "third_party/blink/public/common/features.h"
++#include "third_party/blink/public/common/helium_noise/windows_identity.h"
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/core/frame/navigator_concurrent_hardware.h"
+ #include "third_party/blink/renderer/core/helium_noise/helium_noise_hash.h"
+@@ -38,6 +39,12 @@
+ #elif BUILDFLAG(IS_FUCHSIA)
+   return "";
+ #elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
++  // The Windows identity freezes the reduced platform to the stock Windows
++  // value when the shared gate is on; DevTools platform overrides keep their
++  // precedence in Navigator::platform(), which reads the override first.
++  if (blink::helium_noise::IsWindowsIdentityEnabled()) {
++    return "Win32";
++  }
+   return "Linux x86_64";
+ #elif BUILDFLAG(IS_IOS)
+   return "iPhone";
