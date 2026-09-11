@@ -122,6 +122,7 @@ jobrowsa/core/rename-hardcoded-labels.patch
 jobrowsa/linux/simd-baseline-avx.patch
 jobrowsa/linux/precompile-inline-scripts.patch
 jobrowsa/linux/swap-dnt-for-gpc.patch
+jobrowsa/linux/windows-identity-platform-ua.patch
 
 trivalent/ugc/add-flag-to-scope-omnibox-autocomplete.patch
 
