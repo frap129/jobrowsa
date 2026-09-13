@@ -20,7 +20,6 @@ vanadium/0086-disable-media-DRM-preprovisioning-by-default.patch
 vanadium/0087-disable-autofill-server-communication-by-default.patch
 vanadium/0088-disable-component-updater-pings-by-default.patch
 vanadium/0090-disable-trivial-subdomain-hiding.patch
-vanadium/0095-Disable-newer-privacy-sandbox-features-by-default.patch
 vanadium/0099-mark-non-secure-origins-as-dangerous.patch
 vanadium/0101-stub-out-the-battery-status-API.patch
 vanadium/0104-disable-trials-of-privacy-aware-analytics-advertisin.patch
@@ -33,14 +32,14 @@ vanadium/0120-enable-split-cache-by-default.patch
 vanadium/0121-enable-partitioning-connections-by-default.patch
 vanadium/0122-enable-dubious-Do-Not-Track-feature-by-default.patch
 vanadium/0124-Enable-strict-origin-isolation-by-default.patch
-vanadium/0159-Derive-high-entropy-client-hints-with-reduced-user-a.patch
-vanadium/0164-Use-local-list-of-supported-languages-for-Language-s.patch
-vanadium/0200-enable-subresource-filter-on-all-sites.patch
-vanadium/0227-Support-restriction-of-dynamic-code.patch
-vanadium/0228-Restriction-of-dynamic-code-execution-via-seccomp-bp.patch
-vanadium/0232-Enable-HSTS-upgrades-for-top-level-navigation-only-b.patch
-vanadium/0244-enable-more-Local-Network-Access-coverage-checks-by-.patch
-vanadium/0249-Enable-origin-keyed-process-isolation-by-default.patch
+vanadium/0158-Derive-high-entropy-client-hints-with-reduced-user-a.patch
+vanadium/0163-Use-local-list-of-supported-languages-for-Language-s.patch
+vanadium/0199-enable-subresource-filter-on-all-sites.patch
+vanadium/0226-Support-restriction-of-dynamic-code.patch
+vanadium/0227-Restriction-of-dynamic-code-execution-via-seccomp-bp.patch
+vanadium/0231-Enable-HSTS-upgrades-for-top-level-navigation-only-b.patch
+vanadium/0243-enable-more-Local-Network-Access-coverage-checks-by-.patch
+vanadium/0248-Enable-origin-keyed-process-isolation-by-default.patch
 vanadium/modified-block-playing-protected-media-by-default.patch
 vanadium/modified-disable-seed-based-field-trials.patch
 
@@ -125,4 +124,4 @@ jobrowsa/linux/windows-identity-platform-ua.patch
 
 trivalent/ugc/add-flag-to-scope-omnibox-autocomplete.patch
 
-trivalent/fixes/152-fixes.patch
+trivalent/fixes/add-logging-headers-to-hwdec-sandbox.patch
