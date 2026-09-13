@@ -76,7 +76,7 @@
 -  token_hash.Update(n);
 -
 -  auto values = PossibleValuesForCoreCount(n);
--  return values[token_hash.GetValueBelow(values.size())];
+-  return values[token_hash.GetValueBelow(static_cast<int>(values.size()))];
 +  const int device_memory_gb = static_cast<int>(
 +      ApproximatedDeviceMemory::GetApproximatedDeviceMemory());
 +  const std::vector<unsigned> candidates =
@@ -89,7 +89,7 @@
 +      HeliumNoiseFeature::kHardware));
 +  token_hash.Update(hardware_concurrency);
 +  token_hash.Update(device_memory_gb);
-+  return candidates[token_hash.GetValueBelow(candidates.size())];
++  return candidates[token_hash.GetValueBelow(static_cast<int>(candidates.size()))];
 +#else
 +  return hardware_concurrency;
 +#endif
