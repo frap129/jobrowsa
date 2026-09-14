@@ -7,7 +7,10 @@ ffmpeg_branding="Chrome"
 proprietary_codecs=true
 fatal_linker_warnings=false
 rtc_use_pipewire=true
-rtc_link_pipewire=true
+# rtc_link_pipewire stays at upstream's default (false): the sysroot's
+# PipeWire 0.3.65 headers predate the vendored 1.6 API WebRTC 153 compiles
+# against (spa_pod_type_size), so Trivalent's rtc_link_pipewire=true breaks
+# the build. Keeping dlopen stubs also avoids a hard libpipewire runtime dep.
 is_clang=true
 is_debug=false
 use_kerberos=true
