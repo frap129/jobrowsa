@@ -121,6 +121,7 @@ jobrowsa/linux/simd-baseline-avx.patch
 jobrowsa/linux/precompile-inline-scripts.patch
 jobrowsa/linux/swap-dnt-for-gpc.patch
 jobrowsa/linux/windows-identity-platform-ua.patch
+jobrowsa/core/download-bubble-state-accessor.patch
 
 trivalent/ugc/add-flag-to-scope-omnibox-autocomplete.patch
 
