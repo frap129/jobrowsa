@@ -1,4 +1,4 @@
-%define version 0.17.0.1
+%define version 0.17.2.1
 %global debug_package %{nil}
 
 Name:    jobrowsa-bin
