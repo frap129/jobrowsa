@@ -84,13 +84,13 @@ Container mechanics:
 
 - Validate patch structure with `./helium-chromium/devutils/lint.py -t .` (CI enforces the same on every push and PR).
 - When changing shell code, run syntax checks (`bash -n`) for each changed script.
-- `scripts/sync-trivalent.sh` with no arguments is a non-mutating upstream drift check; `--update` fetches changed pristine patches and updates the manifest; `--verify-apply` does an offline zero-fuzz application check of both series and requires a pristine `build/src` (fails if `.patched.stamp` exists); `--keep-state` preserves the failure point for manual rebasing.
+- `scripts/sync-trivalent.sh` is scoped to updating the vendored Trivalent/Vanadium patch set against secureblue upstream. With no arguments it is a non-mutating upstream drift check; `--update` fetches changed pristine patches and updates the manifest; `--keep-state` preserves the failure point for manual rebasing. `--verify-apply` does an offline zero-fuzz application check of both series and requires a pristine `build/src` (fails if `.patched.stamp` exists). Use `--verify-apply` only when updating vendored Trivalent patches; it is not a general patch-validity check for unrelated changes.
 - Run the narrowest relevant tests or build checks for the changed surface, then broader checks when practical.
 - Do not claim a browser build succeeded unless the containerized build pipeline completed successfully.
 
 ## Patch import policy (Trivalent/Vanadium)
 
-- Vendored secureblue/Trivalent patches (Vanadium and Trivalent sets) live in this repository's `patches/` tree and apply after the shared Helium series; provenance is tracked in `trivalent.manifest` and sync tooling is `scripts/sync-trivalent.sh`.
+- Vendored secureblue/Trivalent patches (Vanadium and Trivalent sets) live in this repository's `patches/` tree and apply after the shared Helium series; provenance is tracked in `trivalent.manifest` and `scripts/sync-trivalent.sh` is the sync tool for that patch set. It is not a general-purpose validation step and must not be invoked for changes that do not update vendored Trivalent patches.
 - Never modify an existing patch from the Helium, ungoogled, inox, iridium, brave, bromite, debian, or upstream-fixes sets. Resolve conflicts by dropping or replacing a patch, or by adding a new patch under `patches/jobrowsa/`. Vendored patches that no longer apply are replaced in place and re-marked `adapted` in `trivalent.manifest`.
 - The build pipeline (`scripts/shared.sh`, `scripts/build.sh`, `scripts/docker-build.sh`, `scripts/dev.sh`, `scripts/package.sh`, `helium-chromium/utils/patches.py`) is unchanged. Additions under `scripts/` are allowed.
 - GN args are exempt from the no-modification rule: `helium-chromium/flags.gn` and `flags.linux.gn` are editable and trivially mergable.
