@@ -1,7 +1,7 @@
 # trivalent.manifest - provenance for vendored secureblue/Trivalent patches
 # header: pinned upstream snapshot commit
 # entries: <upstream-path> <upstream-blob-sha> <disposition: pristine|adapted|dropped>
-trivalent-snapshot 4c97a3d116e635b3d77da7341c2b1050c5d7c3b7
+trivalent-snapshot 594b636da6a876945d671f2fa5cadd75765e7851
 patches/third_party/vanadium/0067-disable-navigation-error-correction-by-default.patch 8f808a915db48980a8b6cc5a73f7a92ca323173a dropped
 patches/third_party/vanadium/0069-disable-network-prediction-by-default.patch 6e47c969c0d53622986c80ac5487e80c391800c8 dropped
 patches/third_party/vanadium/0071-disable-hyperlink-auditing-by-default.patch 754d0d17a02071652ab4075a78aea66081f845c3 dropped
@@ -56,14 +56,14 @@ patches/trivalent/enable-parallel-downloading-by-default.patch 8c6bd7a3bf3bab5e8
 patches/trivalent/enable-vertical-tabs-exposure.patch 2478ed30c32f54f6a8abd29bd16fa221e9db18f7 dropped
 patches/trivalent/expose-flags.patch 2cfd36dc5b9148bf0d6e4b614d03e32f328d22ec adapted
 patches/trivalent/force-disable-safe-browsing.patch 19fab52be1c35cbd9db9426a931569cf23e39a75 adapted
-patches/trivalent/force-third-party-ntp.patch 8d86dd09567d950a74ac5e6997d766efa5196872 adapted
+patches/trivalent/force-third-party-ntp.patch 37812a8254459a2c2877e5b19aba6485ba9c8274 adapted
 patches/trivalent/hide-ui-popup-text.patch 65ba4c73c86ea5772cc78cc74daf173198465471 pristine
 patches/trivalent/increase-style-filter-limits.patch 88f5d9b4aeb5d8f751b92f8736ecb32a2bc58ca4 pristine
 patches/trivalent/privacy/add-cross-origin-referrer-clearing-feature.patch 890609676178305b0a13c2474dc6a0e1f3f32c54 adapted
 patches/trivalent/privacy/clear-windowname-property-across-contexts.patch 2e944d90a2b599e0ddbb5d9c564c234c0ac33da0 pristine
 patches/trivalent/privacy/disable-ai-features-and-components-by-default.patch c884fcac94f2f381bcffdceae7e813815a2b331f adapted
 patches/trivalent/privacy/disable-gcm.patch 561356859ab1b31c9106300b3848a0fbfc1e84b5 dropped
-patches/trivalent/privacy/disable-lens.patch e73c24fa216a0d0a0ba87f0aecb555f3b9bbc019 pristine
+patches/trivalent/privacy/disable-lens.patch e6bab5e94e95b029cd5fc266afba78502821adf0 pristine
 patches/trivalent/privacy/disable-metrics-reporting.patch f851e13818c0e363da34835ad4579df627d799bf pristine
 patches/trivalent/privacy/disable-promotions-by-default.patch 4131ec085bb40b29433801b0f2299f2f007c01ff pristine
 patches/trivalent/privacy/disable-protected-content.patch c7d1e749edb8994e23252191c92667208cb3b429 pristine
@@ -71,7 +71,7 @@ patches/trivalent/privacy/disable-search-suggest-by-default.patch d0d5987a899ed7
 patches/trivalent/privacy/disable-sync-by-default.patch 9a3fcd677c2298cc2837da42bf4a5612863b532e pristine
 patches/trivalent/search-config-improvements.patch 6fd57969713f86ceaf0e12c754d7e4cedab28d30 adapted
 patches/trivalent/search-selection.patch 75095c932191e6402683ee4b1f8ed531bb18a051 adapted
-patches/trivalent/security/add-feature-to-disable-pdf-javascript.patch c4270543d25c3f0f893b568b84008520cab3fd8b adapted
+patches/trivalent/security/add-feature-to-disable-pdf-javascript.patch e2d674ea9005301e3f5ebb1cc1ed4285a1d53311 adapted
 patches/trivalent/security/add-feature-to-show-puny-code.patch 734715d7128b81fc5ca526598d48ad2466914ac6 pristine
 patches/trivalent/security/adjust-jit-controls.patch f92f9757bf1afcf67d64b6369e8da39be92f876f pristine
 patches/trivalent/security/block-external-extensions.patch 081a23cc47e2a1f9d50dab6ccb87238805fc04b0 pristine
@@ -95,12 +95,12 @@ patches/trivalent/show-full-urls-by-default.patch c97bb8f8a8ea6a2bafd1df4408b5cf
 patches/trivalent/translations/en-GB.patch d896e1fef8b7c2ed5d9d3777bdcec03d7d36132e pristine
 patches/trivalent/ui/add-license-info.patch 73189fa2dd7ea2fd5289a3010e57169543e57a93 adapted
 patches/trivalent/ui/add-new-prefs.patch fdd38edd6a2e1d6f6c74e7eb86fba16efa238c28 adapted
-patches/trivalent/ui/adjust-prefs-text.patch 496c5b71146710bd796ff78dfdd81b79b96c9a8b adapted
-patches/trivalent/ui/adjust-security-and-privacy-page.patch 0f7e47bf1bdbd02023f04cfa572444c93bf7c071 adapted
-patches/trivalent/ui/hide-privacy-intrusive-prefs.patch 648970f0c396624bb3d9aae9a0b738f4fa32bf75 adapted
-patches/trivalent/ui/hide-useless-prefs.patch 2ae236c398a1a3d57aa50356dfb0becd319a5505 adapted
+patches/trivalent/ui/adjust-prefs-text.patch 27117e8e7dcf3056759629313d4643698bdec959 adapted
+patches/trivalent/ui/adjust-security-and-privacy-page.patch d8c509f4774f779a3e137c8e81031cab5f2e9ce7 adapted
+patches/trivalent/ui/hide-privacy-intrusive-prefs.patch c5f458452db6c9e78d8c2c7d9a5767f812a03b78 adapted
+patches/trivalent/ui/hide-useless-prefs.patch e011f372ba8eb8772aad18f0b01a011ac4401cce adapted
 patches/trivalent/ui/register-new-strings.patch 9c027af59916d2a19b6f50c7e046815c725f306c adapted
-patches/trivalent/linux/build-hardening.patch 57ba3e0d20649f60943d9494b1ccc1828c73480f pristine
+patches/trivalent/linux/build-hardening.patch da4548bc58cb3471f387fd58afd3e58e2845428d pristine
 patches/trivalent/linux/classic-theme-by-default.patch ab2e0c5d4c0951c161f65504ea811ecf26bf0b92 pristine
 patches/trivalent/linux/configure-gpu-features.patch 5853b94ed9c712dd4e1575cd6422f03a6bf5827b adapted
 patches/trivalent/linux/disable-global-shortcuts-portal.patch 884a9a23e82f2abd13716895e64367002d999f0f pristine
