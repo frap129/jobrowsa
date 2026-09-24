@@ -51,7 +51,6 @@ libGLESv2.so
 libqt5_shim.so
 libqt6_shim.so
 libvulkan.so.1
-locales/
 product_logo_256.png
 resources.pak
 v8_context_snapshot.bin"
@@ -66,9 +65,18 @@ _stage_tarball() {
 		cp -r "$_build_dir/src/out/Default/$file" "$_tarball_dir" &
 	done
 
+<<<<<<< HEAD
 	cp "$_root_dir/package/jobrowsa.desktop" "$_tarball_dir"
 	cp "$_root_dir/package/apparmor.cfg" "$_tarball_dir"
 	cp "$_root_dir/package/jobrowsa-wrapper.sh" "$_tarball_dir/jobrowsa-wrapper"
+=======
+mkdir -p "$_tarball_dir/locales"
+cp "$_build_dir/src/out/Default/locales/"*.pak "$_tarball_dir/locales/"
+
+cp "$_root_dir/package/helium.desktop" "$_tarball_dir"
+cp "$_root_dir/package/apparmor.cfg" "$_tarball_dir"
+cp "$_root_dir/package/helium-wrapper.sh" "$_tarball_dir/helium-wrapper"
+>>>>>>> 0d03416c32aab13c678f6d284956d4510b07ad86
 
 	wait
 	(cd "$_tarball_dir" && ln -sf jobrowsa chrome)
