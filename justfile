@@ -26,8 +26,29 @@ image:
 
 # Build the browser binary inside a Debian container
 build:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
     podman image exists chromium-builder:trixie-slim 2>/dev/null || { command -v docker >/dev/null 2>&1 && docker image inspect chromium-builder:trixie-slim >/dev/null 2>&1; } || just image
-    if [ -f build/src/out/Default/build.ninja ]; then SCCACHE_DIR=/repo/.sccache ./scripts/resume-build.sh; else SCCACHE_DIR=/repo/.sccache _use_existing_image=1 ./scripts/docker-build.sh; fi
+
+    if [ -f build/src/out/Default/build.ninja ]; then
+        SCCACHE_DIR=/repo/.sccache ./scripts/resume-build.sh
+    else
+        build_args=()
+        if command -v curl >/dev/null 2>&1; then
+            _version="$(cat helium-chromium/chromium_version.txt)"
+            _url="$(sed -n '/^\[chromium\]/,/^\[/{s/^url = //p;}' helium-chromium/downloads.ini)"
+            _url="${_url//%(_chromium_version)s/${_version}}"
+            if ! curl -fsIL --max-time 30 -o /dev/null "$_url" || ! curl -fsIL --max-time 30 -o /dev/null "${_url}.hashes"; then
+                echo "source archive unavailable at ${_url}; cloning the source instead" >&2
+                build_args=(-c)
+            fi
+        else
+            echo "curl is unavailable; cloning the source instead of probing the archive URL" >&2
+            build_args=(-c)
+        fi
+        SCCACHE_DIR=/repo/.sccache _use_existing_image=1 ./scripts/docker-build.sh "${build_args[@]}"
+    fi
 
 # Package an Arch Linux .pkg.tar.zst under build/release/
 arch:
