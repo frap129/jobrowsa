@@ -1,14 +1,33 @@
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -2865,6 +2865,8 @@
-       "views/tabs/tab_style_views.h",
-       "views/tabs/tab_width_constraints.cc",
-       "views/tabs/tab_width_constraints.h",
+@@ -2619,6 +2619,7 @@
+       "views/session_crashed_bubble_view.h",
+       "views/tab_search_bubble_host.cc",
+       "views/tab_search_bubble_host.h",
 +      "views/tabs/vertical/vertical_tab_strip_header_view.cc",
-+      "views/tabs/vertical/vertical_tab_strip_header_view.h",
-       "views/tabs/vertical_tab_style_views.cc",
-       "views/tabs/vertical_tab_style_views.h",
-       "views/tabs/z_orderable_tab_container_element.cc",
+       "views/web_apps/create_shortcut_confirmation_view.cc",
+       "views/web_apps/create_shortcut_confirmation_view.h",
+       "views/web_apps/frame_toolbar/web_app_frame_toolbar_view.cc",
+--- a/chrome/browser/ui/views/tabs/vertical/BUILD.gn
++++ b/chrome/browser/ui/views/tabs/vertical/BUILD.gn
+@@ -12,6 +12,7 @@
+     "vertical_tab_strip_bottom_container.h",
+     "vertical_tab_strip_expand_on_hover_lock.h",
+     "vertical_tab_strip_focus_swipe_controller.h",
++    "vertical_tab_strip_header_view.h",
+     "vertical_tab_strip_scroll_bar.h",
+     "vertical_tab_strip_top_container.h",
+   ]
+--- a/chrome/browser/ui/views/toolbar/BUILD.gn
++++ b/chrome/browser/ui/views/toolbar/BUILD.gn
+@@ -252,6 +252,7 @@
+     "//chrome/browser/ui/views/tabs:base",
+     "//chrome/browser/ui/views/tabs:tab_strip",
+     "//chrome/browser/ui/views/tabs/glic",
++    "//chrome/browser/ui/views/tabs/vertical",
+     "//chrome/browser/ui/waap",
+     "//chrome/browser/ui/waap:manager",
+     "//chrome/browser/ui/waap:window_metrics_manager",
 --- a/chrome/app/settings_strings.grdp
 +++ b/chrome/app/settings_strings.grdp
 @@ -309,6 +309,9 @@
@@ -47,15 +66,15 @@
  // When false, the address bar uses the full available width.
 --- a/chrome/browser/ui/tabs/tab_strip_prefs.cc
 +++ b/chrome/browser/ui/tabs/tab_strip_prefs.cc
-@@ -37,6 +37,8 @@
+@@ -35,6 +35,8 @@
    registry->RegisterBooleanPref(prefs::kHeliumZenMode, false);
    registry->RegisterBooleanPref(prefs::kHeliumZenModeSidebarPinned, false);
    registry->RegisterBooleanPref(prefs::kHeliumZenModeTopChromePinned, false);
 +  registry->RegisterBooleanPref(prefs::kHeliumVerticalAddressBarInSidebar,
 +                                false);
+ }
  
-   registry->RegisterBooleanPref(prefs::kVerticalTabsCollapsedState, false);
-   registry->RegisterIntegerPref(prefs::kVerticalTabsUncollapsedWidth,
+ void MigrateHoverCardMemoryPref(PrefService* local_prefs) {
 --- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
 +++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
 @@ -222,6 +222,8 @@
@@ -79,10 +98,10 @@
    HeliumLayoutType GetBrowserLayout() const;
 --- a/chrome/browser/ui/helium/helium_layout_state_controller.cc
 +++ b/chrome/browser/ui/helium/helium_layout_state_controller.cc
-@@ -6,6 +6,7 @@
+@@ -8,6 +8,7 @@
  
+ #include "base/functional/bind.h"
  #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
- #include "chrome/browser/ui/tabs/features.h"
 +#include "chrome/browser/ui/ui_features.h"
  #include "chrome/common/pref_names.h"
  #include "components/prefs/pref_service.h"
@@ -372,12 +391,13 @@
  #include "ui/views/controls/button/button.h"
  #include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
  #include "ui/views/interaction/view_subregion_anchor.h"
-@@ -123,8 +124,10 @@
+@@ -123,9 +124,11 @@
  }
  
  namespace views {
 +class BubbleAnchor;
  class EventMonitor;
+ class LabelButton;
  class WebView;
 +enum class MenuAnchorPosition;
  }  // namespace views
