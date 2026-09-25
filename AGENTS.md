@@ -19,7 +19,7 @@ The goal is a reproducible, locally buildable browser that preserves Chromium's 
 
 - `justfile`: developer entry points; `just -l` lists them. `just build` is the canonical local build command.
 - `helium-chromium/`: cross-platform source-transformation layer (git submodule) containing shared patches, utilities, resources, translations, flags, and the pinned Chromium version (`chromium_version.txt`).
-- `patches/`: Linux-specific quilt patches applied after the shared series; ordering is defined by `patches/series` (ungoogled-chromium, then helium, then vanadium/trivalent, then `jobrowsa/` last). Own patches go under `patches/jobrowsa/` (`linux/` for platform/build changes, `core/` for product identity and UI strings).
+- `patches/`: Linux-specific quilt patches applied after the shared series; ordering is defined by `patches/series` (ungoogled-chromium, then helium, then vanadium/trivalent, then `jobrowsa/` last). Own patches go under `patches/jobrowsa/` (`linux/` for platform/build changes, `noise/` for the cross-platform anti-fingerprinting stack, `core/` for product identity, UI strings, and UX changes).
 - `flags.linux.gn`: Linux-specific GN arguments applied after shared Helium flags.
 - `scripts/shared.sh`: shared source preparation and build operations; sourced by local and CI scripts.
 - `scripts/build.sh`: canonical ordered preparation and compilation entry point (runs inside the container).

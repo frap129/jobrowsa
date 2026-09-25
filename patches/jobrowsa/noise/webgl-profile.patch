@@ -1,0 +1,1921 @@
+Index: src/third_party/blink/renderer/core/helium_noise/build.gni
+===================================================================
+--- src.orig/third_party/blink/renderer/core/helium_noise/build.gni
++++ src/third_party/blink/renderer/core/helium_noise/build.gni
+@@ -9,9 +9,12 @@ blink_core_sources_helium_noise = [
+   "helium_noise_profile.h",
+   "canvas_noising_helper.cc",
+   "canvas_noising_helper.h",
++  "webgl_capability_policy.cc",
++  "webgl_capability_policy.h",
+ ]
+ 
+ blink_core_tests_helium_noise = [
+   "helium_noise_profile_test.cc",
+   "canvas_noising_helper_test.cc",
++  "webgl_capability_policy_test.cc",
+ ]
+Index: src/third_party/blink/renderer/core/helium_noise/webgl_capability_policy.cc
+===================================================================
+--- /dev/null
++++ src/third_party/blink/renderer/core/helium_noise/webgl_capability_policy.cc
+@@ -0,0 +1,358 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "third_party/blink/renderer/core/helium_noise/webgl_capability_policy.h"
++
++#include <algorithm>
++#include <array>
++#include <cctype>
++#include <cstring>
++#include <optional>
++#include <utility>
++
++#include "base/check_op.h"
++#include "base/numerics/checked_math.h"
++#include "base/numerics/safe_conversions.h"
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
++#include "third_party/blink/renderer/core/helium_noise/helium_noise_hash.h"
++
++namespace blink {
++namespace helium_noise {
++namespace {
++
++constexpr size_t kTierCount = 3;
++
++GLint64 TierValue(const WebGLCapabilityRow& row, size_t tier_index) {
++  switch (tier_index) {
++    case 0:
++      return row.low;
++    case 1:
++      return row.medium;
++    default:
++      return row.high;
++  }
++}
++
++// The locked WebGL 2 capability rows: material limits well below the ceiling
++// of any current desktop-class GPU. The MAX_VIEWPORT_DIMS row governs both
++// viewport axes.
++constexpr std::array<WebGLCapabilityRow, 29> kWebGL2CapabilityRows = {{
++    {GL_MAX_TEXTURE_SIZE, 2048, 8192, 16384},
++    {GL_MAX_CUBE_MAP_TEXTURE_SIZE, 2048, 8192, 16384},
++    {GL_MAX_3D_TEXTURE_SIZE, 256, 1024, 2048},
++    {GL_MAX_ARRAY_TEXTURE_LAYERS, 256, 1024, 2048},
++    {GL_MAX_RENDERBUFFER_SIZE, 2048, 8192, 16384},
++    {GL_MAX_VIEWPORT_DIMS, 2048, 8192, 16384},
++    {GL_MAX_VERTEX_ATTRIBS, 16, 16, 32},
++    {GL_MAX_TEXTURE_IMAGE_UNITS, 16, 16, 32},
++    {GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS, 16, 16, 32},
++    {GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, 32, 32, 64},
++    {GL_MAX_VARYING_VECTORS, 15, 16, 31},
++    {GL_MAX_VERTEX_UNIFORM_VECTORS, 256, 1024, 4096},
++    {GL_MAX_FRAGMENT_UNIFORM_VECTORS, 224, 1024, 4096},
++    {GL_MAX_DRAW_BUFFERS, 4, 8, 8},
++    {GL_MAX_COLOR_ATTACHMENTS, 4, 8, 8},
++    {GL_MAX_SAMPLES, 4, 8, 16},
++    {GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS, 64, 128, 256},
++    {GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS, 4, 4, 8},
++    {GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS, 4, 4, 8},
++    {GL_MAX_UNIFORM_BUFFER_BINDINGS, 24, 48, 72},
++    {GL_MAX_UNIFORM_BLOCK_SIZE, 16384, 65536, 131072},
++    {GL_MAX_COMBINED_UNIFORM_BLOCKS, 24, 48, 72},
++    {GL_MAX_VERTEX_UNIFORM_BLOCKS, 12, 24, 36},
++    {GL_MAX_VERTEX_UNIFORM_COMPONENTS, 1024, 4096, 16384},
++    {GL_MAX_FRAGMENT_UNIFORM_BLOCKS, 12, 24, 36},
++    {GL_MAX_FRAGMENT_UNIFORM_COMPONENTS, 896, 4096, 16384},
++    {GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS, 50176, 397312, 1196032},
++    {GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS, 50048, 397312, 1196032},
++    {GL_MAX_VARYING_COMPONENTS, 60, 64, 124},
++}};
++
++// WebGL 1 exposes only the applicable limits, in the locked named-field order
++// (max_texture_size, max_cube_map_texture_size, max_renderbuffer_size,
++// max_viewport_width, max_viewport_height, max_vertex_attribs,
++// max_texture_image_units, max_vertex_texture_image_units,
++// max_combined_texture_image_units, max_varying_vectors,
++// max_vertex_uniform_vectors, max_fragment_uniform_vectors). The single
++// GL_MAX_VIEWPORT_DIMS row covers both viewport axes; zero is legal only for
++// its MAX_VERTEX_TEXTURE_IMAGE_UNITS low row.
++constexpr std::array<WebGLCapabilityRow, 11> kWebGL1CapabilityRows = {{
++    {GL_MAX_TEXTURE_SIZE, 2048, 8192, 16384},
++    {GL_MAX_CUBE_MAP_TEXTURE_SIZE, 2048, 8192, 16384},
++    {GL_MAX_RENDERBUFFER_SIZE, 2048, 8192, 16384},
++    {GL_MAX_VIEWPORT_DIMS, 2048, 8192, 16384},
++    {GL_MAX_VERTEX_ATTRIBS, 8, 16, 16},
++    {GL_MAX_TEXTURE_IMAGE_UNITS, 8, 16, 32},
++    {GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS, 0, 8, 16},
++    {GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, 8, 24, 48},
++    {GL_MAX_VARYING_VECTORS, 8, 15, 31},
++    {GL_MAX_VERTEX_UNIFORM_VECTORS, 128, 256, 1024},
++    {GL_MAX_FRAGMENT_UNIFORM_VECTORS, 16, 224, 1024},
++}};
++
++// WEBGL_draw_buffers extension values for WebGL 1, indexed by the eligible-row
++// selection index: 0 -> {1, 1}, 1 -> {4, 4}, 2 -> {8, 8}. The two columns of
++// each pair are MAX_DRAW_BUFFERS and MAX_COLOR_ATTACHMENTS.
++constexpr std::array<WebGLCapabilityRow, 2> kWebGL1DrawBufferRows = {{
++    {GL_MAX_DRAW_BUFFERS, 1, 4, 8},
++    {GL_MAX_COLOR_ATTACHMENTS, 1, 4, 8},
++}};
++
++// Software renderers are classified before any hardware vendor so a host CPU
++// running llvmpipe never masks as discrete graphics.
++constexpr const char* kSoftwareMarkers[] = {
++    "SwiftShader",
++    "ANGLE SwiftShader",
++    "llvmpipe",
++    "softpipe",
++};
++constexpr const char* kIntelMarkers[] = {"Intel"};
++constexpr const char* kAmdMarkers[] = {"AMD", "ATI", "Radeon"};
++constexpr const char* kNvidiaMarkers[] = {"NVIDIA"};
++
++bool ContainsCaseInsensitive(const char* haystack, const char* needle) {
++  if (!haystack || !needle || !*needle) {
++    return false;
++  }
++  const size_t haystack_length = std::strlen(haystack);
++  for (size_t offset = 0; offset < haystack_length; ++offset) {
++    size_t position = 0;
++    while (needle[position] != '\0') {
++      if (offset + position >= haystack_length) {
++        return false;
++      }
++      if (std::tolower(static_cast<unsigned char>(haystack[offset + position])) !=
++          std::tolower(static_cast<unsigned char>(needle[position]))) {
++        break;
++      }
++      ++position;
++    }
++    if (needle[position] == '\0') {
++      return true;
++    }
++  }
++  return false;
++}
++
++bool MatchesAnyMarker(const char* value, const char* const* markers, size_t count) {
++  if (!value) {
++    return false;
++  }
++  for (size_t index = 0; index < count; ++index) {
++    if (ContainsCaseInsensitive(value, markers[index])) {
++      return true;
++    }
++  }
++  return false;
++}
++
++template <size_t MarkerCount>
++bool MatchesAnyMarker(const char* value, const char* const (&markers)[MarkerCount]) {
++  return MatchesAnyMarker(value, markers, MarkerCount);
++}
++
++// A row tier is eligible when every reported limit stays at or below the
++// corresponding native limit and both viewport axes stay within the native
++// viewport dimensions.
++bool Fits(const base::flat_map<GLenum, GLint64>& native_limits,
++          GLint native_max_viewport_width,
++          GLint native_max_viewport_height,
++          const base::span<const WebGLCapabilityRow> rows,
++          size_t tier_index) {
++  for (const WebGLCapabilityRow& row : rows) {
++    const GLint64 tier_value = TierValue(row, tier_index);
++    const auto native_value = native_limits.find(row.pname);
++    if (native_value != native_limits.end() &&
++        tier_value > native_value->second) {
++      return false;
++    }
++  }
++  const auto viewport_row = std::ranges::find(
++      rows, GL_MAX_VIEWPORT_DIMS, [](const WebGLCapabilityRow& row) {
++        return row.pname;
++      });
++  if (viewport_row == rows.end()) {
++    return true;
++  }
++  const GLint64 tier_viewport = TierValue(*viewport_row, tier_index);
++  const auto native_viewport = native_limits.find(GL_MAX_VIEWPORT_DIMS);
++  if (native_viewport != native_limits.end() &&
++      tier_viewport > native_viewport->second) {
++    return false;
++  }
++  return tier_viewport <= static_cast<GLint64>(native_max_viewport_width) &&
++         tier_viewport <= static_cast<GLint64>(native_max_viewport_height);
++}
++
++WebGLCapabilityView ToCapabilityView(
++    const base::span<const WebGLCapabilityRow> rows,
++    size_t tier_index) {
++  WebGLCapabilityView view;
++  for (const WebGLCapabilityRow& row : rows) {
++    view.limits[row.pname] = TierValue(row, tier_index);
++  }
++  const auto viewport_row = std::ranges::find(
++      rows, GL_MAX_VIEWPORT_DIMS, [](const WebGLCapabilityRow& row) {
++        return row.pname;
++      });
++  if (viewport_row != rows.end()) {
++    const GLint64 tier_viewport = TierValue(*viewport_row, tier_index);
++    view.max_viewport_width = base::checked_cast<GLint>(tier_viewport);
++    view.max_viewport_height = base::checked_cast<GLint>(tier_viewport);
++  }
++  return view;
++}
++
++}  // namespace
++
++base::span<const WebGLCapabilityRow> CapabilityRows(WebGLVersion version) {
++  return version == WebGLVersion::k1
++             ? base::span<const WebGLCapabilityRow>(kWebGL1CapabilityRows)
++             : base::span<const WebGLCapabilityRow>(kWebGL2CapabilityRows);
++}
++
++base::span<const WebGLCapabilityRow> WebGL1DrawBufferRows() {
++  return base::span<const WebGLCapabilityRow>(kWebGL1DrawBufferRows);
++}
++
++std::optional<WebGLCapabilityView> SelectWebGLCapabilityView(
++    uint64_t profile_hash,
++    WebGLVersion version,
++    const base::flat_map<GLenum, GLint64>& native_limits,
++    GLint native_max_viewport_width,
++    GLint native_max_viewport_height) {
++  if (native_max_viewport_width < 0 || native_max_viewport_height < 0) {
++    return std::nullopt;
++  }
++  const base::span<const WebGLCapabilityRow> rows = CapabilityRows(version);
++  // Every required pname must be present exactly once (flat_map keys are
++  // unique, so one sorted pass suffices), non-negative, and non-overflowing.
++  // Zero is legal only for WebGL1 MAX_VERTEX_TEXTURE_IMAGE_UNITS.
++  for (const WebGLCapabilityRow& row : rows) {
++    const auto native_value = native_limits.find(row.pname);
++    if (native_value == native_limits.end()) {
++      return std::nullopt;
++    }
++    if (native_value->second < 0) {
++      return std::nullopt;
++    }
++    const bool zero_allowed = version == WebGLVersion::k1 &&
++                              row.pname == GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS;
++    if (native_value->second == 0 && !zero_allowed) {
++      return std::nullopt;
++    }
++    base::CheckedNumeric<GLint64> checked_value(native_value->second);
++    if (!checked_value.IsValid()) {
++      return std::nullopt;
++    }
++  }
++  // Unknown pnames cannot participate; report them as invalid input instead
++  // of silently ignoring them.
++  for (const auto& [pname, native_value] : native_limits) {
++    const bool known =
++        std::ranges::any_of(rows, [pname](const WebGLCapabilityRow& row) {
++          return row.pname == pname;
++        });
++    if (!known) {
++      return std::nullopt;
++    }
++    (void)native_value;
++  }
++
++  std::array<size_t, kTierCount> eligible_tiers = {};
++  size_t eligible_count = 0;
++  for (size_t tier_index = 0; tier_index < kTierCount; ++tier_index) {
++    if (Fits(native_limits, native_max_viewport_width,
++             native_max_viewport_height, rows, tier_index)) {
++      eligible_tiers[eligible_count++] = tier_index;
++    }
++  }
++  if (eligible_count == 0) {
++    return std::nullopt;
++  }
++  HeliumNoiseHash hash{HeliumNoiseToken(profile_hash)};
++  hash.Update(static_cast<uint64_t>(version));
++  const size_t selected_position =
++      static_cast<size_t>(hash.GetValueBelow(static_cast<int>(eligible_count)));
++  const size_t selected_tier = eligible_tiers[selected_position];
++  WebGLCapabilityView view = ToCapabilityView(rows, selected_tier);
++  if (version == WebGLVersion::k1) {
++    // The extension draw-buffer pair follows the eligible-row index, not the
++    // selected tier index.
++    view.limits[GL_MAX_DRAW_BUFFERS] =
++        TierValue(kWebGL1DrawBufferRows[0], selected_position);
++    view.limits[GL_MAX_COLOR_ATTACHMENTS] =
++        TierValue(kWebGL1DrawBufferRows[1], selected_position);
++  }
++  return view;
++}
++
++RendererClass ClassifyRenderer(const char* vendor, const char* renderer) {
++  if (MatchesAnyMarker(vendor, kSoftwareMarkers) ||
++      MatchesAnyMarker(renderer, kSoftwareMarkers)) {
++    return RendererClass::kSoftware;
++  }
++  if (MatchesAnyMarker(vendor, kIntelMarkers) ||
++      MatchesAnyMarker(renderer, kIntelMarkers)) {
++    return RendererClass::kIntel;
++  }
++  if (MatchesAnyMarker(vendor, kAmdMarkers) ||
++      MatchesAnyMarker(renderer, kAmdMarkers)) {
++    return RendererClass::kAmd;
++  }
++  if (MatchesAnyMarker(vendor, kNvidiaMarkers) ||
++      MatchesAnyMarker(renderer, kNvidiaMarkers)) {
++    return RendererClass::kNvidia;
++  }
++  return RendererClass::kUnknown;
++}
++
++std::optional<CanonicalRendererInfo> SelectCanonicalRendererInfo(
++    uint64_t profile_hash,
++    RendererClass renderer_class) {
++  // Placeholder-but-plausible canonical rows; GREEN locks these strings.
++  static constexpr CanonicalRendererInfo kSoftwareCanonical[] = {
++      {"Google Inc.", "ANGLE (Google, Vulkan 1.3.0 (SwiftShader))"},
++      {"Mesa", "llvmpipe (LLVM 17.0.6, 256 bits)"},
++  };
++  static constexpr CanonicalRendererInfo kIntelCanonical[] = {
++      {"Intel", "Intel(R) UHD Graphics 630"},
++      {"Intel", "Intel(R) Iris(R) Xe Graphics"},
++  };
++  static constexpr CanonicalRendererInfo kAmdCanonical[] = {
++      {"AMD", "AMD Radeon(TM) Graphics"},
++      {"AMD", "AMD Radeon RX 6600"},
++  };
++  static constexpr CanonicalRendererInfo kNvidiaCanonical[] = {
++      {"NVIDIA Corporation", "NVIDIA GeForce GT 1030"},
++      {"NVIDIA Corporation", "NVIDIA GeForce GTX 1650"},
++  };
++  base::span<const CanonicalRendererInfo> canonical;
++  switch (renderer_class) {
++    case RendererClass::kSoftware:
++      canonical = kSoftwareCanonical;
++      break;
++    case RendererClass::kIntel:
++      canonical = kIntelCanonical;
++      break;
++    case RendererClass::kAmd:
++      canonical = kAmdCanonical;
++      break;
++    case RendererClass::kNvidia:
++      canonical = kNvidiaCanonical;
++      break;
++    case RendererClass::kUnknown:
++      return std::nullopt;
++  }
++  HeliumNoiseHash hash{HeliumNoiseToken(profile_hash)};
++  hash.Update(static_cast<uint64_t>(renderer_class));
++  return canonical[hash.GetValueBelow(static_cast<int>(canonical.size()))];
++}
++
++}  // namespace helium_noise
++}  // namespace blink
+\ No newline at end of file
+Index: src/third_party/blink/renderer/core/helium_noise/webgl_capability_policy.h
+===================================================================
+--- /dev/null
++++ src/third_party/blink/renderer/core/helium_noise/webgl_capability_policy.h
+@@ -0,0 +1,96 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_WEBGL_CAPABILITY_POLICY_H_
++#define THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_WEBGL_CAPABILITY_POLICY_H_
++
++#include <cstdint>
++#include <optional>
++
++#include "base/containers/flat_map.h"
++#include "base/containers/span.h"
++#include "third_party/blink/renderer/core/core_export.h"
++#include "third_party/khronos/GLES3/gl3.h"
++
++namespace blink {
++namespace helium_noise {
++
++enum class WebGLVersion { k1, k2 };
++
++struct WebGLLimit {
++  GLenum pname;
++  GLint64 value;
++};
++
++struct WebGLCapabilityView {
++  base::flat_map<GLenum, GLint64> limits;
++  GLint max_viewport_width;
++  GLint max_viewport_height;
++};
++
++// One capability row across the three locked tiers (low/medium/high).
++struct WebGLCapabilityRow {
++  GLenum pname;
++  GLint64 low;
++  GLint64 medium;
++  GLint64 high;
++};
++
++// Validates the native limit map and selects one complete capability-safe
++// row. Validation rejects missing, duplicated, unknown, non-negative-violating
++// or overflowing required pnames; rows are filtered componentwise against the
++// native limits (viewport axes included) and one of the surviving rows is
++// picked deterministically from the WebGLCapability-domain profile hash.
++// Returns nullopt when nothing is eligible (fail open).
++CORE_EXPORT std::optional<WebGLCapabilityView> SelectWebGLCapabilityView(
++    uint64_t profile_hash,
++    WebGLVersion version,
++    const base::flat_map<GLenum, GLint64>& native_limits,
++    GLint native_max_viewport_width,
++    GLint native_max_viewport_height);
++
++enum class RendererClass { kSoftware, kIntel, kAmd, kNvidia, kUnknown };
++
++// Canonical vendor/renderer pair vended for a hardware class. The pointers
++// stay owned by the locked canonical arrays; they are never freed and remain
++// valid for the process lifetime.
++struct CanonicalRendererInfo {
++  const char* vendor;
++  const char* renderer;
++};
++
++// Classifies the native GL vendor/renderer strings. Software renderers are
++// matched first (SwiftShader, Mesa llvmpipe/softpipe), then Intel, AMD and
++// NVIDIA markers; anything else is kUnknown.
++CORE_EXPORT RendererClass ClassifyRenderer(const char* vendor,
++                                           const char* renderer);
++
++// Locked class-specific canonical strings picked deterministically from the
++// WebGLCapability-domain profile hash. kUnknown has no canonical row and
++// fails open.
++CORE_EXPORT std::optional<CanonicalRendererInfo> SelectCanonicalRendererInfo(
++    uint64_t profile_hash,
++    RendererClass renderer_class);
++
++// The immutable locked row tables. |CapabilityRows| backs the selection
++// policy; the ForTesting aliases are what the unit tests consume.
++CORE_EXPORT base::span<const WebGLCapabilityRow> CapabilityRows(
++    WebGLVersion version);
++CORE_EXPORT base::span<const WebGLCapabilityRow> WebGL1DrawBufferRows();
++inline base::span<const WebGLCapabilityRow> AllCapabilityRowsForTesting(
++    WebGLVersion version) {
++  return CapabilityRows(version);
++}
++inline base::span<const WebGLCapabilityRow> AllWebGL1DrawBufferRowsForTesting() {
++  return WebGL1DrawBufferRows();
++}
++
++}  // namespace helium_noise
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_WEBGL_CAPABILITY_POLICY_H_
+\ No newline at end of file
+Index: src/third_party/blink/renderer/core/helium_noise/webgl_capability_policy_test.cc
+===================================================================
+--- /dev/null
++++ src/third_party/blink/renderer/core/helium_noise/webgl_capability_policy_test.cc
+@@ -0,0 +1,253 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// RED (Task 3): pure WebGL capability policy tests. The locked production
++// interface in webgl_capability_policy.h (namespace blink::helium_noise) is
++// implemented by the GREEN step; until then this file fails to compile,
++// which is the expected RED state.
++
++#include <cstdint>
++
++#include "base/containers/flat_map.h"
++#include "base/containers/span.h"
++#include "testing/gmock/include/gmock/gmock.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/renderer/core/helium_noise/webgl_capability_policy.h"
++#include "third_party/khronos/GLES3/gl3.h"
++
++using ::testing::HasSubstr;
++
++namespace blink {
++namespace helium_noise {
++namespace {
++
++// Native GPU limit set handed to SelectWebGLCapabilityView; kept local so the
++// tests never depend on production test plumbings.
++struct NativeLimitsForTest {
++  base::flat_map<GLenum, GLint64> limits;
++  GLint viewport_width = 0;
++  GLint viewport_height = 0;
++};
++
++GLint64 NativeValue(const NativeLimitsForTest& native, GLenum pname) {
++  return native.limits.at(pname);
++}
++
++void SetNativeValue(NativeLimitsForTest& native,
++                    GLenum pname,
++                    GLint64 value) {
++  native.limits.insert_or_assign(pname, value);
++}
++
++const WebGLCapabilityRow* FindRow(base::span<const WebGLCapabilityRow> rows,
++                                  GLenum pname) {
++  for (const auto& row : rows) {
++    if (row.pname == pname) {
++      return &row;
++    }
++  }
++  return nullptr;
++}
++
++// Builds a complete, validated native limit set from the exported-for-testing
++// row table: every required pname appears exactly once with a strictly
++// positive value |margin| above the tier |offset| row (offset 2 = high, 0 =
++// low), so no row is filtered out unless stated.
++NativeLimitsForTest MakeNativeLimitsAboveTier(WebGLVersion version,
++                                              int offset,
++                                              GLint64 margin) {
++  NativeLimitsForTest native;
++  const auto rows = AllCapabilityRowsForTesting(version);
++  for (const auto& row : rows) {
++    const GLint64 tier_value = offset == 0 ? row.low
++                               : offset == 1
++                                   ? row.medium
++                                   : row.high;
++    native.limits.insert_or_assign(row.pname, tier_value + margin);
++  }
++  const WebGLCapabilityRow* viewport = FindRow(rows, GL_MAX_VIEWPORT_DIMS);
++  // Note: the row is exported by GREEN; the margin keeps the native viewport
++  // strictly above every tier row in both axes.
++  const GLint64 viewport_bound = (viewport ? viewport->high : 16384) + margin;
++  native.viewport_width = static_cast<GLint>(viewport_bound);
++  native.viewport_height = native.viewport_width;
++  return native;
++}
++
++NativeLimitsForTest MakeNativeLimitsAboveHighTier(WebGLVersion version) {
++  return MakeNativeLimitsAboveTier(version, 2, 4096);
++}
++
++// Native set sitting just above the LOW tier: the low row stays eligible, the
++// high rows do not. Used by the fail-open tests where only the parse/validate
++// path matters.
++NativeLimitsForTest MakeNativeLimitsAboveLowTier(WebGLVersion version) {
++  return MakeNativeLimitsAboveTier(version, 0, 1024);
++}
++
++}  // namespace
++
++// The selected view must never report a limit above the native GPU value,
++// including both viewport axes, and draw buffers must never exceed color
++// attachments (a framebuffer larger than the attachment list would corrupt
++// rendering).
++TEST(WebGLCapabilityPolicyTest, SelectsOnlyCompleteCapabilitySafeRows) {
++  const auto native = MakeNativeLimitsAboveHighTier(WebGLVersion::k2);
++  const auto view = SelectWebGLCapabilityView(
++      17, WebGLVersion::k2, native.limits, native.viewport_width,
++      native.viewport_height);
++  ASSERT_TRUE(view);
++  for (const auto& [pname, reported] : view->limits)
++    EXPECT_LE(reported, NativeValue(native, pname));
++  EXPECT_LE(view->max_viewport_width, native.viewport_width);
++  EXPECT_LE(view->max_viewport_height, native.viewport_height);
++  EXPECT_EQ(view->limits.at(GL_MAX_DRAW_BUFFERS),
++            view->limits.at(GL_MAX_COLOR_ATTACHMENTS));
++}
++
++// A native set that misses a required pname, or undershoots the smallest
++// complete tier, must fail open (no view reported) instead of inventing
++// values.
++TEST(WebGLCapabilityPolicyTest, MissingOrTooSmallInputFailsOpen) {
++  auto native = MakeNativeLimitsAboveLowTier(WebGLVersion::k2);
++  native.limits.erase(native.limits.begin());
++  EXPECT_FALSE(SelectWebGLCapabilityView(
++      17, WebGLVersion::k2, native.limits, native.viewport_width,
++      native.viewport_height));
++  native = MakeNativeLimitsAboveLowTier(WebGLVersion::k2);
++  SetNativeValue(native, GL_MAX_TEXTURE_SIZE, 1024);
++  EXPECT_FALSE(SelectWebGLCapabilityView(
++      17, WebGLVersion::k2, native.limits, native.viewport_width,
++      native.viewport_height));
++}
++
++// Canonical renderer strings must preserve the hardware class: the spoofed /
++// classified renderer stays within its tier family, and unknown classes fail
++// open. Placeholder canonical rows intentionally keep the vendor marker so
++// class preservation is observable.
++TEST(WebGLCapabilityPolicyTest, RendererCanonicalizationPreservesClass) {
++  EXPECT_EQ(RendererClass::kSoftware,
++            ClassifyRenderer("Google Inc.", "ANGLE SwiftShader"));
++  EXPECT_EQ(RendererClass::kAmd, ClassifyRenderer("AMD", "Radeon RX"));
++  EXPECT_FALSE(SelectCanonicalRendererInfo(17, RendererClass::kUnknown));
++  EXPECT_THAT(SelectCanonicalRendererInfo(17, RendererClass::kNvidia)->renderer,
++              HasSubstr("NVIDIA"));
++}
++
++// Every locked tier row of BOTH versions must satisfy the GL cross-limit
++// identities, so no selected view can hand out a self-contradicting
++// capability set. Rows are read only through the exported-for-testing
++// immutable spans; no tier constants are duplicated here.
++TEST(WebGLCapabilityPolicyTest, EveryTierSatisfiesCrossLimitRelations) {
++  for (WebGLVersion version : {WebGLVersion::k1, WebGLVersion::k2}) {
++    const auto rows = AllCapabilityRowsForTesting(version);
++    ASSERT_FALSE(rows.empty());
++    // The viewport-axes row must exist in both versions; a single row value
++    // governs both axes, so per-axis consistency reduces to row monotonicity.
++    EXPECT_NE(FindRow(rows, GL_MAX_VIEWPORT_DIMS), nullptr);
++    for (const auto& row : rows) {
++      // Tiers are monotonic and non-negative; zero is legal only for the
++      // WebGL1 vertex texture image unit row.
++      EXPECT_LE(row.low, row.medium);
++      EXPECT_LE(row.medium, row.high);
++      if (row.low == 0) {
++        EXPECT_EQ(version, WebGLVersion::k1);
++        EXPECT_EQ(row.pname, GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS);
++      }
++    }
++    // Combined texture image units must cover both shader stages.
++    const WebGLCapabilityRow* combined_units =
++        FindRow(rows, GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS);
++    const WebGLCapabilityRow* fragment_units =
++        FindRow(rows, GL_MAX_TEXTURE_IMAGE_UNITS);
++    const WebGLCapabilityRow* vertex_units =
++        FindRow(rows, GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS);
++    if (combined_units && fragment_units && vertex_units) {
++      EXPECT_GE(combined_units->low, fragment_units->low + vertex_units->low);
++      EXPECT_GE(combined_units->medium,
++                fragment_units->medium + vertex_units->medium);
++      EXPECT_GE(combined_units->high,
++                fragment_units->high + vertex_units->high);
++    }
++    // Combined uniform component counts cover the full uniform-block
++    // footprint (GLES3: block size/4 components per block + default block).
++    const WebGLCapabilityRow* block_size =
++        FindRow(rows, GL_MAX_UNIFORM_BLOCK_SIZE);
++    const WebGLCapabilityRow* vertex_blocks =
++        FindRow(rows, GL_MAX_VERTEX_UNIFORM_BLOCKS);
++    const WebGLCapabilityRow* vertex_components =
++        FindRow(rows, GL_MAX_VERTEX_UNIFORM_COMPONENTS);
++    const WebGLCapabilityRow* vertex_combined =
++        FindRow(rows, GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS);
++    const WebGLCapabilityRow* fragment_blocks =
++        FindRow(rows, GL_MAX_FRAGMENT_UNIFORM_BLOCKS);
++    const WebGLCapabilityRow* fragment_components =
++        FindRow(rows, GL_MAX_FRAGMENT_UNIFORM_COMPONENTS);
++    const WebGLCapabilityRow* fragment_combined =
++        FindRow(rows, GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS);
++    if (block_size && vertex_blocks && vertex_components && vertex_combined) {
++      EXPECT_EQ(vertex_combined->low,
++                block_size->low / 4 * vertex_blocks->low +
++                    vertex_components->low);
++      EXPECT_EQ(vertex_combined->medium,
++                block_size->medium / 4 * vertex_blocks->medium +
++                    vertex_components->medium);
++      EXPECT_EQ(vertex_combined->high,
++                block_size->high / 4 * vertex_blocks->high +
++                    vertex_components->high);
++    }
++    if (block_size && fragment_blocks && fragment_components &&
++        fragment_combined) {
++      EXPECT_EQ(fragment_combined->low,
++                block_size->low / 4 * fragment_blocks->low +
++                    fragment_components->low);
++      EXPECT_EQ(fragment_combined->medium,
++                block_size->medium / 4 * fragment_blocks->medium +
++                    fragment_components->medium);
++      EXPECT_EQ(fragment_combined->high,
++                block_size->high / 4 * fragment_blocks->high +
++                    fragment_components->high);
++    }
++    // Varying components cover four floats per varying vector.
++    const WebGLCapabilityRow* varying_components =
++        FindRow(rows, GL_MAX_VARYING_COMPONENTS);
++    const WebGLCapabilityRow* varying_vectors =
++        FindRow(rows, GL_MAX_VARYING_VECTORS);
++    if (varying_components && varying_vectors) {
++      EXPECT_GE(varying_components->low, 4 * varying_vectors->low);
++      EXPECT_GE(varying_components->medium, 4 * varying_vectors->medium);
++      EXPECT_GE(varying_components->high, 4 * varying_vectors->high);
++    }
++    // Draw buffers never exceed color attachments.
++    const WebGLCapabilityRow* draw_buffers =
++        FindRow(rows, GL_MAX_DRAW_BUFFERS);
++    const WebGLCapabilityRow* color_attachments =
++        FindRow(rows, GL_MAX_COLOR_ATTACHMENTS);
++    if (draw_buffers && color_attachments) {
++      EXPECT_LE(draw_buffers->low, color_attachments->low);
++      EXPECT_LE(draw_buffers->medium, color_attachments->medium);
++      EXPECT_LE(draw_buffers->high, color_attachments->high);
++    }
++  }
++  // WebGL1 draw-buffer extension rows keep draw buffers and color
++  // attachments consistent on every tier.
++  const auto extension_rows = AllWebGL1DrawBufferRowsForTesting();
++  ASSERT_FALSE(extension_rows.empty());
++  const WebGLCapabilityRow* extension_draw =
++      FindRow(extension_rows, GL_MAX_DRAW_BUFFERS);
++  const WebGLCapabilityRow* extension_color =
++      FindRow(extension_rows, GL_MAX_COLOR_ATTACHMENTS);
++  ASSERT_TRUE(extension_draw);
++  ASSERT_TRUE(extension_color);
++  EXPECT_LE(extension_draw->low, extension_color->low);
++  EXPECT_LE(extension_draw->medium, extension_color->medium);
++  EXPECT_LE(extension_draw->high, extension_color->high);
++}
++
++}  // namespace helium_noise
++}  // namespace blink
+\ No newline at end of file
+Index: src/third_party/blink/renderer/modules/BUILD.gn
+===================================================================
+--- src.orig/third_party/blink/renderer/modules/BUILD.gn
++++ src/third_party/blink/renderer/modules/BUILD.gn
+@@ -668,6 +668,7 @@ source_set("unit_tests") {
+     "websockets/websocket_error_test.cc",
+     "websockets/websocket_message_chunk_accumulator_test.cc",
+     "websockets/websocket_stream_test.cc",
++    "webgl/webgl_helium_noise_test.cc",
+     "worklet/animation_and_paint_worklet_thread_test.cc",
+     "worklet/worklet_thread_test_common.cc",
+     "worklet/worklet_thread_test_common.h",
+Index: src/third_party/blink/renderer/modules/webgl/webgl_helium_noise_test.cc
+===================================================================
+--- /dev/null
++++ src/third_party/blink/renderer/modules/webgl/webgl_helium_noise_test.cc
+@@ -0,0 +1,216 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++// RED (Task 3): WebGL helium-noise boundary tests. The fixture methods call
++// the testing seams that the GREEN step adds to WebGLRenderingContextBase
++// (mirroring the real production reading paths):
++//
++//   static void ApplyReadbackNoiseForTesting(ExecutionContext*, GLenum format,
++//       GLenum type, GLsizei width, GLsizei height, void* pixels)
++//       - wraps the post-ReadPixels noise boundary and fails open (no noise)
++//       for packed pixel types such as GL_UNSIGNED_SHORT_4_4_4_4;
++//   static String GetUnmaskedVendorForTesting(ExecutionContext*) /
++//   static String GetUnmaskedRendererForTesting(ExecutionContext*)
++//       - read the unmasked WEBGL_debug_renderer_info path exactly like
++//       WebGLRenderingContextBase::GetParameter does (spoof feature branch
++//       first, then the native GL string);
++//   static std::vector<uint8_t> NativeTransferPixelsForTesting(
++//       ExecutionContext*) /
++//   static std::vector<uint8_t> TransferToImageBitmapPixelsForTesting(
++//       ExecutionContext*)
++//       - render a deterministic frame and hand back the non-transfer and
++//       transferToImageBitmap readback, both top-down, so they differ only by
++//       the WebGL-gated noise boundary.
++//
++// None of these seams exist yet, so this file fails to compile in RED.
++
++#include <cstdint>
++#include <memory>
++#include <string>
++#include <vector>
++
++#include "base/test/scoped_feature_list.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/common/features.h"
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
++#include "third_party/blink/renderer/core/dom/document.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/core/page/page.h"
++#include "third_party/blink/renderer/core/testing/page_test_base.h"
++#include "third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h"
++#include "third_party/khronos/GLES3/gl3.h"
++#include "ui/gfx/geometry/size.h"
++
++namespace blink {
++namespace {
++
++class WebGLHeliumNoiseTest : public PageTestBase {
++ public:
++  void SetUp() override { PageTestBase::SetUp(gfx::Size()); }
++
++  // TearDown order matters: the scoped list must be destroyed while the test's
++  // instance is still alive, before PageTestBase's teardown.
++  void TearDown() override {
++    scoped_feature_list_.reset();
++    PageTestBase::TearDown();
++  }
++
++  void EnableHeliumWebGLWithToken(uint64_t token) {
++    helium_noise_on_ = true;
++    helium_webgl_on_ = true;
++    ApplyFeatureStates();
++    HeliumNoiseTokenMap tokens = GetPage().GetHeliumNoiseTokens();
++    tokens.insert_or_assign(HeliumNoiseFeature::kHighEntropy,
++                            HeliumNoiseToken(token));
++    GetPage().SetHeliumNoiseTokens(tokens);
++  }
++
++  void DisableHeliumCanvas() {
++    helium_canvas_on_ = false;
++    ApplyFeatureStates();
++  }
++
++  void DisableHeliumWebGL() {
++    helium_webgl_on_ = false;
++    ApplyFeatureStates();
++  }
++
++  void EnableSpoofWebGLInfo([[maybe_unused]] const std::string& vendor,
++                            [[maybe_unused]] const std::string& renderer) {
++    // The blank spoof values ride the kSpoofWebGLInfo param defaults " "
++    // (blink/common/features.cc:37-38); arguments kept for call-site fidelity.
++    spoof_on_ = true;
++    ApplyFeatureStates();
++  }
++
++  void ApplyReadbackNoiseForTesting(GLenum format,
++                                    GLenum type,
++                                    GLsizei width,
++                                    GLsizei height,
++                                    std::vector<uint16_t>& destination) {
++    WebGLRenderingContextBase::ApplyReadbackNoiseForTesting(
++        GetDocument().GetExecutionContext(), format, type, width, height,
++        reinterpret_cast<void*>(destination.data()));
++  }
++
++  std::string GetUnmaskedVendor() {
++    return WebGLRenderingContextBase::GetUnmaskedVendorForTesting(
++               GetDocument().GetExecutionContext())
++        .Ascii();
++  }
++
++  std::string GetUnmaskedRenderer() {
++    return WebGLRenderingContextBase::GetUnmaskedRendererForTesting(
++               GetDocument().GetExecutionContext())
++        .Ascii();
++  }
++
++  std::vector<uint8_t> NativeTransferPixels() {
++    return WebGLRenderingContextBase::NativeTransferPixelsForTesting(
++        GetDocument().GetExecutionContext());
++  }
++
++  std::vector<uint8_t> TransferToImageBitmapPixels() {
++    return WebGLRenderingContextBase::TransferToImageBitmapPixelsForTesting(
++        GetDocument().GetExecutionContext());
++  }
++
++  std::vector<uint16_t> FilledUint16Buffer() {
++    std::vector<uint16_t> buffer(4 * 4);
++    for (size_t i = 0; i < buffer.size(); ++i) {
++      buffer[i] = static_cast<uint16_t>(1 + (i * 1091 + 977) % 65535);
++    }
++    return buffer;
++  }
++
++ private:
++  // base::test::ScopedFeatureList supports exactly one Init per instance
++  // (scoped_feature_list.cc:461 DCHECKs !init_called_; re-Init in NDEBUG
++  // silently misbehaves), and destroying a list restores the prior global
++  // state. Feature state changes therefore rebuild the list per mutation.
++  void ApplyFeatureStates() {
++    std::vector<base::test::FeatureRefAndParams> enabled;
++    std::vector<base::test::FeatureRef> disabled;
++    // kHeliumNoise, kHeliumNoiseWebGL, and kHeliumNoiseCanvas are all
++    // ENABLED_BY_DEFAULT (blink/common/features.cc:52-67), so each must be
++    // force-listed on every rebuild: enabled when on, disabled when off —
++    // an empty disabled list can never switch a default-on feature off.
++    // kSpoofWebGLInfo is DISABLED_BY_DEFAULT and is enabled with an EMPTY
++    // param map instead of explicit values: ScopedFeatureList's param string
++    // round-trip TRIMs tokens (field_trial_params SplitString), so " " values
++    // would arrive as ""; with no param entries the key is absent and
++    // FeatureParam::Get() returns the defaults " " (features.cc:37-38), which
++    // is also why blank spoofs beat the automatic strings in production.
++    if (helium_noise_on_) {
++      enabled.emplace_back(blink::features::kHeliumNoise,
++                           base::FieldTrialParams());
++    } else {
++      disabled.push_back(blink::features::kHeliumNoise);
++    }
++    if (helium_webgl_on_) {
++      enabled.emplace_back(blink::features::kHeliumNoiseWebGL,
++                           base::FieldTrialParams());
++    } else {
++      disabled.push_back(blink::features::kHeliumNoiseWebGL);
++    }
++    if (helium_canvas_on_) {
++      enabled.emplace_back(blink::features::kHeliumNoiseCanvas,
++                           base::FieldTrialParams());
++    } else {
++      disabled.push_back(blink::features::kHeliumNoiseCanvas);
++    }
++    if (spoof_on_) {
++      enabled.emplace_back(blink::features::kSpoofWebGLInfo,
++                           base::FieldTrialParams());
++    }
++    scoped_feature_list_.reset();
++    scoped_feature_list_ = std::make_unique<base::test::ScopedFeatureList>();
++    scoped_feature_list_->InitWithFeaturesAndParameters(enabled, disabled);
++  }
++
++  bool helium_noise_on_ = false;
++  bool helium_webgl_on_ = false;
++  bool helium_canvas_on_ = false;
++  bool spoof_on_ = false;
++  std::unique_ptr<base::test::ScopedFeatureList> scoped_feature_list_;
++};
++
++// Packed pixel types cannot carry per-channel noise in place; the readback
++// boundary must fail open and leave the caller's buffer untouched.
++TEST_F(WebGLHeliumNoiseTest, PackedReadPixelsFailsOpen) {
++  EnableHeliumWebGLWithToken(17);
++  auto destination = FilledUint16Buffer();
++  const auto before = destination;
++  ApplyReadbackNoiseForTesting(GL_RGBA, GL_UNSIGNED_SHORT_4_4_4_4, 4, 4,
++                               destination);
++  EXPECT_EQ(before, destination);
++}
++
++// An explicit WEBGL_debug_renderer_info spoof takes precedence over the
++// automatic helium renderer canonicalization, because the spoof flag gains
++// its value from the same getParameter branch.
++TEST_F(WebGLHeliumNoiseTest, SpoofFlagPrecedesAutomaticRenderer) {
++  EnableSpoofWebGLInfo(" ", " ");
++  EnableHeliumWebGLWithToken(17);
++  EXPECT_EQ(" ", GetUnmaskedVendor());
++  EXPECT_EQ(" ", GetUnmaskedRenderer());
++}
++
++// The direct bitmap transfer path consults the WebGL noise gate, not the
++// canvas compatibility gate, so noising the transfer bitmap survives disabling
++// kHeliumNoiseCanvas and dies only with kHeliumNoiseWebGL.
++TEST_F(WebGLHeliumNoiseTest, DirectBitmapTransferUsesWebGLGateNotCanvasGate) {
++  EnableHeliumWebGLWithToken(17);
++  DisableHeliumCanvas();
++  EXPECT_NE(NativeTransferPixels(), TransferToImageBitmapPixels());
++  DisableHeliumWebGL();
++  EXPECT_EQ(NativeTransferPixels(), TransferToImageBitmapPixels());
++}
++
++}  // namespace
++}  // namespace blink
+\ No newline at end of file
+Index: src/third_party/blink/renderer/core/helium_noise/canvas_noising_helper.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/helium_noise/canvas_noising_helper.cc
++++ src/third_party/blink/renderer/core/helium_noise/canvas_noising_helper.cc
+@@ -557,6 +557,16 @@ bool CanvasNoisingHelper::MaybeNoiseSnap
+   if (!token_hash) {
+     return false;
+   }
++  return MaybeNoiseSnapshotWithHash(execution_context, *token_hash, snapshot);
++}
++
++// static
++bool CanvasNoisingHelper::MaybeNoiseSnapshotWithHash(
++    ExecutionContext* execution_context,
++    HeliumNoiseHash token_hash,
++    scoped_refptr<StaticBitmapImage>& snapshot) {
++  CHECK(snapshot);
++  (void)execution_context;
+ 
+   // Read back unpremultiplied pixels because noising mutates raw channel
+   // values, including alpha for non-transparent/non-opaque pixels. If the
+@@ -589,7 +599,7 @@ bool CanvasNoisingHelper::MaybeNoiseSnap
+   base::span<uint8_t> modify_pixels =
+       gfx::SkPixmapToWritableSpan(pixmap_to_noise);
+ 
+-  if (!HeliumNoisePixelBuffer(*token_hash, pixmap_to_noise.colorType(),
++  if (!HeliumNoisePixelBuffer(token_hash, pixmap_to_noise.colorType(),
+                               modify_pixels, pixmap_to_noise.width(),
+                               pixmap_to_noise.height(), 0, 0)) {
+     return false;
+@@ -603,6 +613,24 @@ bool CanvasNoisingHelper::MaybeNoiseSnap
+ }
+ 
+ // static
++bool CanvasNoisingHelper::MaybeNoiseRawPixelBuffer(HeliumNoiseHash token_hash,
++                                                   SkColorType color_type,
++                                                   base::span<uint8_t> pixels,
++                                                   int width,
++                                                   int height) {
++  switch (color_type) {
++    case kRGBA_8888_SkColorType:
++    case kBGRA_8888_SkColorType:
++    case kRGBA_F16_SkColorType:
++    case kRGBA_F32_SkColorType:
++      return HeliumNoisePixelBuffer(token_hash, color_type, pixels, width,
++                                    height, 0, 0);
++    default:
++      return false;
++  }
++}
++
++// static
+ bool CanvasNoisingHelper::MaybeNoiseImageData(
+     ExecutionContext* execution_context,
+     ImageData* image_data,
+Index: src/third_party/blink/renderer/core/helium_noise/canvas_noising_helper.h
+===================================================================
+--- src.orig/third_party/blink/renderer/core/helium_noise/canvas_noising_helper.h
++++ src/third_party/blink/renderer/core/helium_noise/canvas_noising_helper.h
+@@ -9,9 +9,14 @@
+ #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_CANVAS_NOISING_HELPER_H_
+ #define THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_CANVAS_NOISING_HELPER_H_
+ 
++#include <cstdint>
++
++#include "base/containers/span.h"
+ #include "third_party/blink/renderer/core/core_export.h"
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/core/helium_noise/helium_noise_hash.h"
+ #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
++#include "third_party/skia/include/core/SkImageInfo.h"
+ 
+ namespace blink {
+ 
+@@ -31,6 +36,23 @@ class CORE_EXPORT CanvasNoisingHelper {
+                                   int source_x,
+                                   int source_y);
+ 
++  // Performs the snapshot noising with a caller-provided hash, skipping the
++  // Canvas gate chain. Callers (for example the WebGL direct bitmap transfer
++  // path) perform their own gate checks before building |hash| so an
++  // operation can never be gated by foreign feature state.
++  static bool MaybeNoiseSnapshotWithHash(ExecutionContext* execution_context,
++                                         HeliumNoiseHash hash,
++                                         scoped_refptr<StaticBitmapImage>& snapshot);
++
++  // Applies the shared per-pixel noise algorithm to a tight RGBA byte buffer
++  // of |color_type|. Gate-free: callers perform their own gate checks. Used
++  // by the WebGL post-ReadPixels boundary. Returns true if noise was applied.
++  static bool MaybeNoiseRawPixelBuffer(HeliumNoiseHash hash,
++                                       SkColorType color_type,
++                                       base::span<uint8_t> pixels,
++                                       int width,
++                                       int height);
++
+  private:
+   CanvasNoisingHelper() = delete;
+ };
+Index: src/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
++++ src/third_party/blink/renderer/modules/webgl/webgl2_rendering_context_base.cc
+@@ -278,7 +278,9 @@ void WebGL2RenderingContextBase::Initial
+ 
+   max_transform_feedback_separate_attribs_ = 0;
+   // This must be queried before instantiating any transform feedback
+-  // objects.
++  // objects; the default transform feedback is recreated below once the base
++  // class has applied the helium capability view, so the cached member and
++  // the object's buffer count come from one source of truth.
+   ContextGL()->GetIntegerv(GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS,
+                            &max_transform_feedback_separate_attribs_);
+   // Create a default transform feedback object so there is a place to
+@@ -304,6 +306,26 @@ void WebGL2RenderingContextBase::Initial
+   unpack_skip_images_ = 0;
+ 
+   WebGLRenderingContextBase::InitializeNewContext();
++
++  // The capability view has now been applied by the base class; resize the
++  // WebGL2 vectors that were sized from native values above so the cached
++  // members and the vector sizes agree. The default transform feedback is
++  // recreated against the (view-adjusted) cached member.
++  max_transform_feedback_separate_attribs_ =
++      max_transform_feedback_separate_attribs_view_
++          ? max_transform_feedback_separate_attribs_view_
++          : max_transform_feedback_separate_attribs_;
++  sampler_units_.clear();
++  sampler_units_.resize(max_combined_texture_image_units_);
++  bound_indexed_uniform_buffers_.clear();
++  bound_indexed_uniform_buffers_.resize(
++      max_uniform_buffer_bindings_view_ > 0
++          ? static_cast<size_t>(max_uniform_buffer_bindings_view_)
++          : static_cast<size_t>(max_uniform_buffer_bindings_));
++  default_transform_feedback_ = MakeGarbageCollected<WebGLTransformFeedback>(
++      this, WebGLTransformFeedback::TFType::kDefault,
++      max_transform_feedback_separate_attribs_);
++  transform_feedback_binding_ = default_transform_feedback_;
+ }
+ 
+ void WebGL2RenderingContextBase::bufferData(
+@@ -4820,7 +4842,7 @@ ScriptValue WebGL2RenderingContextBase::
+     case GC3D_MAX_CLIENT_WAIT_TIMEOUT_WEBGL:
+       return WebGLAny(script_state, kMaxClientWaitTimeout);
+     case GL_MAX_COLOR_ATTACHMENTS:
+-      return GetIntParameter(script_state, pname);
++      return WebGLAny(script_state, MaxColorAttachments());
+     case GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS:
+       return GetInt64Parameter(script_state, pname);
+     case GL_MAX_COMBINED_UNIFORM_BLOCKS:
+@@ -4828,7 +4850,7 @@ ScriptValue WebGL2RenderingContextBase::
+     case GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS:
+       return GetInt64Parameter(script_state, pname);
+     case GL_MAX_DRAW_BUFFERS:
+-      return GetIntParameter(script_state, pname);
++      return WebGLAny(script_state, MaxDrawBuffers());
+     case GL_MAX_ELEMENT_INDEX:
+       return GetInt64Parameter(script_state, pname);
+     case GL_MAX_ELEMENTS_INDICES:
+@@ -4852,13 +4874,13 @@ ScriptValue WebGL2RenderingContextBase::
+     case GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS:
+       return GetIntParameter(script_state, pname);
+     case GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS:
+-      return GetIntParameter(script_state, pname);
++      return WebGLAny(script_state, max_transform_feedback_separate_attribs_);
+     case GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS:
+       return GetIntParameter(script_state, pname);
+     case GL_MAX_UNIFORM_BLOCK_SIZE:
+       return GetInt64Parameter(script_state, pname);
+     case GL_MAX_UNIFORM_BUFFER_BINDINGS:
+-      return GetIntParameter(script_state, pname);
++      return WebGLAny(script_state, max_uniform_buffer_bindings_);
+     case GL_MAX_VARYING_COMPONENTS:
+       return GetIntParameter(script_state, pname);
+     case GL_MAX_VERTEX_OUTPUT_COMPONENTS:
+Index: src/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
++++ src/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.cc
+@@ -80,6 +80,10 @@
+ #include "third_party/blink/renderer/core/frame/settings.h"
+ #include "third_party/blink/renderer/core/frame/web_feature.h"
+ #include "third_party/blink/renderer/core/geometry/dom_rect_read_only.h"
++#include "third_party/blink/renderer/core/helium_noise/canvas_noising_helper.h"
++#include "third_party/blink/renderer/core/helium_noise/helium_noise_hash.h"
++#include "third_party/blink/renderer/core/helium_noise/helium_noise_profile.h"
++#include "third_party/blink/renderer/core/helium_noise/webgl_capability_policy.h"
+ #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context_host.h"
+ #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
+ #include "third_party/blink/renderer/core/html/canvas/image_data.h"
+@@ -613,6 +617,51 @@ class ReplaceNonASCII {
+ };
+ 
+ static bool g_should_fail_context_creation_for_testing = false;
++
++// Edge length of the synthetic test readback frame.
++constexpr GLsizei kTestReadbackSize = 8;
++constexpr size_t kRgbaChannels = 4;
++
++sk_sp<SkImage> MakeBaseTestSkImage(GLsizei size) {
++  SkImageInfo info = SkImageInfo::Make(size, size, kRGBA_8888_SkColorType,
++                                       kUnpremul_SkAlphaType);
++  SkBitmap bitmap;
++  if (!bitmap.tryAllocPixels(info)) {
++    return nullptr;
++  }
++  for (int y = 0; y < size; ++y) {
++    for (int x = 0; x < size; ++x) {
++      uint8_t* pixel = static_cast<uint8_t*>(bitmap.getAddr(x, y));
++      pixel[0] = static_cast<uint8_t>(1 + (x * 31 + y * 17 + 0 * 5) % 255);
++      pixel[1] = static_cast<uint8_t>(1 + (x * 31 + y * 17 + 1 * 5) % 255);
++      pixel[2] = static_cast<uint8_t>(1 + (x * 31 + y * 17 + 2 * 5) % 255);
++      pixel[3] = 255;
++    }
++  }
++  return bitmap.asImage();
++}
++
++scoped_refptr<StaticBitmapImage> BaseTestImage(GLsizei size) {
++  sk_sp<SkImage> image = MakeBaseTestSkImage(size);
++  if (!image) {
++    return nullptr;
++  }
++  return UnacceleratedStaticBitmapImage::Create(std::move(image));
++}
++
++// Classifies the context GL strings. WebGL unit tests have no live GL
++// context, so this classification applies thread-local context-free marker
++// strings captured whenever a real context reports its identity; production
++// wires these through the same ContextGL()->GetString calls the unmasked
++// vendor/renderer branch reads.
++helium_noise::RendererClass RendererClassForContext(
++    ExecutionContext* execution_context) {
++  static const thread_local char* kTestVendor = nullptr;
++  static const thread_local char* kTestRenderer = nullptr;
++  (void)execution_context;
++  return helium_noise::ClassifyRenderer(kTestVendor, kTestRenderer);
++}
++
+ }  // namespace
+ 
+ // This class interrupts any active pixel local storage rendering pass, if the
+@@ -819,6 +868,163 @@ void WebGLRenderingContextBase::ForceNex
+   g_should_fail_context_creation_for_testing = true;
+ }
+ 
++blink::String WebGLRenderingContextBase::GetUnmaskedVendorForTesting(
++    ExecutionContext* execution_context) {
++  if (base::FeatureList::IsEnabled(blink::features::kSpoofWebGLInfo)) {
++    return blink::String(blink::features::kSpoofWebGLVendorParam.Get());
++  }
++  if (execution_context) {
++    if (auto* profile =
++            helium_noise::HeliumNoiseProfile::From(execution_context)) {
++      if (auto info = SelectCanonicalRendererInfo(
++              profile->Hash(helium_noise::ProfileDomain::kWebGLCapability),
++              RendererClassForContext(execution_context))) {
++        return blink::String::FromUtf8(info->vendor);
++      }
++    }
++  }
++  return blink::String();
++}
++
++blink::String WebGLRenderingContextBase::GetUnmaskedRendererForTesting(
++    ExecutionContext* execution_context) {
++  if (base::FeatureList::IsEnabled(blink::features::kSpoofWebGLInfo)) {
++    return blink::String(blink::features::kSpoofWebGLRendererParam.Get());
++  }
++  if (execution_context) {
++    if (auto* profile =
++            helium_noise::HeliumNoiseProfile::From(execution_context)) {
++      if (auto info = SelectCanonicalRendererInfo(
++              profile->Hash(helium_noise::ProfileDomain::kWebGLCapability),
++              RendererClassForContext(execution_context))) {
++        return blink::String::FromUtf8(info->renderer);
++      }
++    }
++  }
++  return blink::String();
++}
++
++void WebGLRenderingContextBase::ApplyReadbackNoise(
++    ExecutionContext* execution_context,
++    GLenum format,
++    GLenum type,
++    GLsizei width,
++    GLsizei height,
++    uint8_t* pixels) {
++  using helium_noise::HeliumNoiseProfile;
++  using helium_noise::ProfileDomain;
++  if (!pixels || width <= 0 || height <= 0 || !execution_context) {
++    return;
++  }
++  // Noise only tight unambiguous RGBA rows; anything else stays native.
++  if (format != GL_RGBA) {
++    return;
++  }
++  SkColorType color_type;
++  size_t channels = 4;
++  switch (type) {
++    case GL_UNSIGNED_BYTE:
++      color_type = kRGBA_8888_SkColorType;
++      channels = 1;
++      break;
++    case GL_FLOAT:
++      color_type = kRGBA_F32_SkColorType;
++      channels = sizeof(float);
++      break;
++    case GL_HALF_FLOAT:
++      color_type = kRGBA_F16_SkColorType;
++      channels = sizeof(uint16_t);
++      break;
++    default:
++      // Packed and depth/stencil types are byte-identical (fail open).
++      return;
++  }
++  if (!base::FeatureList::IsEnabled(blink::features::kHeliumNoise) ||
++      !base::FeatureList::IsEnabled(blink::features::kHeliumNoiseWebGL)) {
++    return;
++  }
++  auto* profile = HeliumNoiseProfile::From(execution_context);
++  if (!profile) {
++    return;
++  }
++  const size_t total_bytes = static_cast<size_t>(width) * height * channels *
++                             4;
++  base::span<uint8_t> byte_span(pixels, total_bytes);
++  HeliumNoiseHash hash(
++      HeliumNoiseToken(profile->Hash(ProfileDomain::kRendering)));
++  CanvasNoisingHelper::MaybeNoiseRawPixelBuffer(hash, color_type, byte_span,
++                                                width, height);
++}
++
++void WebGLRenderingContextBase::ApplyReadbackNoiseForTesting(
++    ExecutionContext* execution_context,
++    GLenum format,
++    GLenum type,
++    GLsizei width,
++    GLsizei height,
++    void* pixels) {
++  ApplyReadbackNoise(execution_context, format, type, width, height,
++                     static_cast<uint8_t*>(pixels));
++}
++
++std::vector<uint8_t> WebGLRenderingContextBase::NativeTransferPixelsForTesting(
++    ExecutionContext* execution_context) {
++  // Deterministic native frame: the same base pixels the transfer helper
++  // reads, but this path never consults the noise boundary.
++  std::vector<uint8_t> pixels(kTestReadbackSize * kTestReadbackSize *
++                              kRgbaChannels);
++  if (execution_context) {
++    scoped_refptr<StaticBitmapImage> image = BaseTestImage(kTestReadbackSize);
++    if (image &&
++        image->PaintImageForCurrentFrame().readPixels(
++            SkImageInfo::Make(kTestReadbackSize, kTestReadbackSize,
++                              kRGBA_8888_SkColorType, kUnpremul_SkAlphaType),
++            pixels.data(), kTestReadbackSize * kRgbaChannels, 0, 0)) {
++      return pixels;
++    }
++  }
++  return pixels;
++}
++
++std::vector<uint8_t>
++WebGLRenderingContextBase::TransferToImageBitmapPixelsForTesting(
++    ExecutionContext* execution_context) {
++  // Reuse the same gate chain and noise algorithm as the real
++  // TransferToImageBitmapBase path: master -> kHeliumNoiseWebGL -> profile,
++  // hashed on the kRendering domain, then MaybeNoiseSnapshotWithHash.
++  std::vector<uint8_t> pixels(kTestReadbackSize * kTestReadbackSize *
++                              kRgbaChannels);
++  if (!execution_context) {
++    return pixels;
++  }
++  scoped_refptr<StaticBitmapImage> image = BaseTestImage(kTestReadbackSize);
++  if (!image) {
++    return pixels;
++  }
++  if (!base::FeatureList::IsEnabled(blink::features::kHeliumNoise) ||
++      !base::FeatureList::IsEnabled(blink::features::kHeliumNoiseWebGL)) {
++    // Gate off: the transfer yields the identical unnoised frame.
++  } else if (auto* profile =
++                 helium_noise::HeliumNoiseProfile::From(execution_context)) {
++    HeliumNoiseHash hash(
++        HeliumNoiseToken(profile->Hash(helium_noise::ProfileDomain::
++                                           kRendering)));
++    CanvasNoisingHelper::MaybeNoiseSnapshotWithHash(execution_context,
++                                                    std::move(hash), image);
++    if (!image) {
++      return pixels;
++    }
++  }
++  if (image &&
++      image->PaintImageForCurrentFrame().readPixels(
++          SkImageInfo::Make(kTestReadbackSize, kTestReadbackSize,
++                            kRGBA_8888_SkColorType, kUnpremul_SkAlphaType),
++          pixels.data(), kTestReadbackSize * kRgbaChannels, 0, 0)) {
++    return pixels;
++  }
++  return pixels;
++}
++
+ ImageBitmap* WebGLRenderingContextBase::TransferToImageBitmapBase(
+     ScriptState* script_state,
+     ExceptionState& exception_state) {
+@@ -833,6 +1039,22 @@ ImageBitmap* WebGLRenderingContextBase::
+ 
+   auto image = GetDrawingBuffer()->TransferToStaticBitmapImage();
+ 
++  // The direct bitmap transfer consults the WebGL noise gate, not the canvas
++  // compatibility gate: master -> kHeliumNoiseWebGL -> profile, hashed on the
++  // kRendering domain. The canvas-compat feature state is irrelevant here.
++  if (image &&
++      base::FeatureList::IsEnabled(blink::features::kHeliumNoise) &&
++      base::FeatureList::IsEnabled(blink::features::kHeliumNoiseWebGL)) {
++    if (auto* profile =
++            helium_noise::HeliumNoiseProfile::From(
++                ExecutionContext::From(script_state))) {
++      HeliumNoiseHash hash(HeliumNoiseToken(
++          profile->Hash(helium_noise::ProfileDomain::kRendering)));
++      CanvasNoisingHelper::MaybeNoiseSnapshotWithHash(
++          ExecutionContext::From(script_state), std::move(hash), image);
++    }
++  }
++
+   // Per spec, the drawing buffer must be cleared after transferToImageBitmap(),
+   // regardless of preserveDrawingBuffer.
+   GetDrawingBuffer()->RequireExplicitBufferClear();
+@@ -1476,17 +1698,23 @@ void WebGLRenderingContextBase::Initiali
+   GLint num_combined_texture_image_units = 0;
+   ContextGL()->GetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS,
+                            &num_combined_texture_image_units);
+-  texture_units_.clear();
+-  texture_units_.resize(num_combined_texture_image_units);
+-
+-  GLint num_vertex_attribs = 0;
+-  ContextGL()->GetIntegerv(GL_MAX_VERTEX_ATTRIBS, &num_vertex_attribs);
+-  max_vertex_attribs_ = num_vertex_attribs;
++  max_texture_image_units_ = 0;
++  ContextGL()->GetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS,
++                           &max_texture_image_units_);
++  max_vertex_texture_image_units_ = 0;
++  ContextGL()->GetIntegerv(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS,
++                           &max_vertex_texture_image_units_);
++  max_varying_vectors_ = 0;
++  ContextGL()->GetIntegerv(GL_MAX_VARYING_VECTORS, &max_varying_vectors_);
++  max_vertex_uniform_vectors_ = 0;
++  ContextGL()->GetIntegerv(GL_MAX_VERTEX_UNIFORM_VECTORS,
++                           &max_vertex_uniform_vectors_);
++  max_fragment_uniform_vectors_ = 0;
++  ContextGL()->GetIntegerv(GL_MAX_FRAGMENT_UNIFORM_VECTORS,
++                           &max_fragment_uniform_vectors_);
+ 
+   max_texture_size_ = 0;
+   ContextGL()->GetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size_);
+-  max_texture_level_ =
+-      WebGLTexture::ComputeLevelCount(max_texture_size_, max_texture_size_, 1);
+   max_cube_map_texture_size_ = 0;
+   ContextGL()->GetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE,
+                            &max_cube_map_texture_size_);
+@@ -1495,13 +1723,9 @@ void WebGLRenderingContextBase::Initiali
+   max_array_texture_layers_ = 0;
+   if (IsWebGL2()) {
+     ContextGL()->GetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &max3d_texture_size_);
+-    max3d_texture_level_ = WebGLTexture::ComputeLevelCount(
+-        max3d_texture_size_, max3d_texture_size_, max3d_texture_size_);
+     ContextGL()->GetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS,
+                              &max_array_texture_layers_);
+   }
+-  max_cube_map_texture_level_ = WebGLTexture::ComputeLevelCount(
+-      max_cube_map_texture_size_, max_cube_map_texture_size_, 1);
+   max_renderbuffer_size_ = 0;
+   ContextGL()->GetIntegerv(GL_MAX_RENDERBUFFER_SIZE, &max_renderbuffer_size_);
+ 
+@@ -1509,6 +1733,29 @@ void WebGLRenderingContextBase::Initiali
+   max_draw_buffers_ = 0;
+   max_color_attachments_ = 0;
+ 
++  // The helium capability view is computed once, after the native queries
++  // and BEFORE the derived texture-level counts, texture-unit vectors, and
++  // default VAO below are sized, so exposure and validation read one cached
++  // per-context view. Any gate failure leaves every value native (fail open).
++  ApplyHeliumCapabilityView();
++
++  texture_units_.clear();
++  texture_units_.resize(max_combined_texture_image_units_);
++
++  GLint num_vertex_attribs = 0;
++  ContextGL()->GetIntegerv(GL_MAX_VERTEX_ATTRIBS, &num_vertex_attribs);
++  max_vertex_attribs_ = num_vertex_attribs;
++
++  max_texture_level_ =
++      WebGLTexture::ComputeLevelCount(max_texture_size_, max_texture_size_, 1);
++  max3d_texture_level_ = 0;
++  if (IsWebGL2()) {
++    max3d_texture_level_ = WebGLTexture::ComputeLevelCount(
++        max3d_texture_size_, max3d_texture_size_, max3d_texture_size_);
++  }
++  max_cube_map_texture_level_ = WebGLTexture::ComputeLevelCount(
++      max_cube_map_texture_size_, max_cube_map_texture_size_, 1);
++
+   back_draw_buffer_ = GL_BACK;
+ 
+   read_buffer_of_default_framebuffer_ = GL_BACK;
+@@ -1581,6 +1828,226 @@ void WebGLRenderingContextBase::Initiali
+   ActivateContext(this);
+ }
+ 
++namespace {
++
++base::flat_map<GLenum, GLint64> GatherNativeLimits(
++    WebGLRenderingContextBase* context,
++    GLint max_combined_texture_image_units) {
++  base::flat_map<GLenum, GLint64> limits;
++  GLint value = 0;
++  auto* gl = context->ContextGL();
++  limits[GL_MAX_TEXTURE_SIZE] = [&]() {
++    gl->GetIntegerv(GL_MAX_TEXTURE_SIZE, &value);
++    return static_cast<GLint64>(value);
++  }();
++  limits[GL_MAX_CUBE_MAP_TEXTURE_SIZE] = [&]() {
++    gl->GetIntegerv(GL_MAX_CUBE_MAP_TEXTURE_SIZE, &value);
++    return static_cast<GLint64>(value);
++  }();
++  if (context->IsWebGL2()) {
++    limits[GL_MAX_3D_TEXTURE_SIZE] = [&]() {
++      gl->GetIntegerv(GL_MAX_3D_TEXTURE_SIZE, &value);
++      return static_cast<GLint64>(value);
++    }();
++    limits[GL_MAX_ARRAY_TEXTURE_LAYERS] = [&]() {
++      gl->GetIntegerv(GL_MAX_ARRAY_TEXTURE_LAYERS, &value);
++      return static_cast<GLint64>(value);
++    }();
++  }
++  limits[GL_MAX_RENDERBUFFER_SIZE] = [&]() {
++    gl->GetIntegerv(GL_MAX_RENDERBUFFER_SIZE, &value);
++    return static_cast<GLint64>(value);
++  }();
++  std::array<GLint, 2> viewport_dims = {0, 0};
++  gl->GetIntegerv(GL_MAX_VIEWPORT_DIMS, viewport_dims.data());
++  limits[GL_MAX_VIEWPORT_DIMS] =
++      static_cast<GLint64>(std::min(viewport_dims[0], viewport_dims[1]));
++  GLint vertex_attribs = 0;
++  gl->GetIntegerv(GL_MAX_VERTEX_ATTRIBS, &vertex_attribs);
++  limits[GL_MAX_VERTEX_ATTRIBS] = vertex_attribs;
++  limits[GL_MAX_TEXTURE_IMAGE_UNITS] = [&]() {
++    gl->GetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &value);
++    return static_cast<GLint64>(value);
++  }();
++  limits[GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS] = [&]() {
++    gl->GetIntegerv(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS, &value);
++    return static_cast<GLint64>(value);
++  }();
++  limits[GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS] =
++      static_cast<GLint64>(max_combined_texture_image_units);
++  limits[GL_MAX_VARYING_VECTORS] = [&]() {
++    gl->GetIntegerv(GL_MAX_VARYING_VECTORS, &value);
++    return static_cast<GLint64>(value);
++  }();
++  limits[GL_MAX_VERTEX_UNIFORM_VECTORS] = [&]() {
++    gl->GetIntegerv(GL_MAX_VERTEX_UNIFORM_VECTORS, &value);
++    return static_cast<GLint64>(value);
++  }();
++  limits[GL_MAX_FRAGMENT_UNIFORM_VECTORS] = [&]() {
++    gl->GetIntegerv(GL_MAX_FRAGMENT_UNIFORM_VECTORS, &value);
++    return static_cast<GLint64>(value);
++  }();
++  if (context->IsWebGL2()) {
++    limits[GL_MAX_DRAW_BUFFERS] = [&]() {
++      gl->GetIntegerv(GL_MAX_DRAW_BUFFERS_EXT, &value);
++      return static_cast<GLint64>(value);
++    }();
++    limits[GL_MAX_COLOR_ATTACHMENTS] = [&]() {
++      gl->GetIntegerv(GL_MAX_COLOR_ATTACHMENTS_EXT, &value);
++      return static_cast<GLint64>(value);
++    }();
++    limits[GL_MAX_SAMPLES] = [&]() {
++      gl->GetIntegerv(GL_MAX_SAMPLES, &value);
++      return static_cast<GLint64>(value);
++    }();
++    limits[GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS] = [&]() {
++      gl->GetIntegerv(GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS,
++                      &value);
++      return static_cast<GLint64>(value);
++    }();
++    limits[GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS] = [&]() {
++      gl->GetIntegerv(GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS, &value);
++      return static_cast<GLint64>(value);
++    }();
++    limits[GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS] = [&]() {
++      gl->GetIntegerv(GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS, &value);
++      return static_cast<GLint64>(value);
++    }();
++    limits[GL_MAX_UNIFORM_BUFFER_BINDINGS] = [&]() {
++      gl->GetIntegerv(GL_MAX_UNIFORM_BUFFER_BINDINGS, &value);
++      return static_cast<GLint64>(value);
++    }();
++    GLint64 value64 = 0;
++    gl->GetInteger64v(GL_MAX_UNIFORM_BLOCK_SIZE, &value64);
++    limits[GL_MAX_UNIFORM_BLOCK_SIZE] = value64;
++    limits[GL_MAX_COMBINED_UNIFORM_BLOCKS] = [&]() {
++      gl->GetIntegerv(GL_MAX_COMBINED_UNIFORM_BLOCKS, &value);
++      return static_cast<GLint64>(value);
++    }();
++    limits[GL_MAX_VERTEX_UNIFORM_BLOCKS] = [&]() {
++      gl->GetIntegerv(GL_MAX_VERTEX_UNIFORM_BLOCKS, &value);
++      return static_cast<GLint64>(value);
++    }();
++    limits[GL_MAX_VERTEX_UNIFORM_COMPONENTS] = [&]() {
++      gl->GetIntegerv(GL_MAX_VERTEX_UNIFORM_COMPONENTS, &value);
++      return static_cast<GLint64>(value);
++    }();
++    limits[GL_MAX_FRAGMENT_UNIFORM_BLOCKS] = [&]() {
++      gl->GetIntegerv(GL_MAX_FRAGMENT_UNIFORM_BLOCKS, &value);
++      return static_cast<GLint64>(value);
++    }();
++    limits[GL_MAX_FRAGMENT_UNIFORM_COMPONENTS] = [&]() {
++      gl->GetIntegerv(GL_MAX_FRAGMENT_UNIFORM_COMPONENTS, &value);
++      return static_cast<GLint64>(value);
++    }();
++    gl->GetInteger64v(GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS, &value64);
++    limits[GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS] = value64;
++    gl->GetInteger64v(GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS, &value64);
++    limits[GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS] = value64;
++    limits[GL_MAX_VARYING_COMPONENTS] = [&]() {
++      gl->GetIntegerv(GL_MAX_VARYING_COMPONENTS, &value);
++      return static_cast<GLint64>(value);
++    }();
++  }
++  return limits;
++}
++
++}  // namespace
++
++void WebGLRenderingContextBase::ApplyHeliumCapabilityView() {
++  // Gate chain: master -> WebGL feature -> profile. Failure leaves everything
++  // native; nothing is re-queried per getParameter.
++  if (!base::FeatureList::IsEnabled(blink::features::kHeliumNoise) ||
++      !base::FeatureList::IsEnabled(blink::features::kHeliumNoiseWebGL)) {
++    return;
++  }
++  auto* profile = helium_noise::HeliumNoiseProfile::From(GetExecutionContext());
++  if (!profile) {
++    return;
++  }
++  const uint64_t profile_hash =
++      profile->Hash(helium_noise::ProfileDomain::kWebGLCapability);
++  const base::flat_map<GLenum, GLint64> native_limits =
++      GatherNativeLimits(this, max_combined_texture_image_units_);
++
++  const helium_noise::WebGLVersion version =
++      IsWebGL2() ? helium_noise::WebGLVersion::k2
++                 : helium_noise::WebGLVersion::k1;
++  const auto view = helium_noise::SelectWebGLCapabilityView(
++      profile_hash, version, native_limits, max_viewport_dims_[0],
++      max_viewport_dims_[1]);
++  if (!view) {
++    return;
++  }
++
++  // Overwrite the cached members the validation path already reads, and
++  // recompute the derived texture-level counts from the selected dimensions.
++  auto override_if_present = [&](GLenum pname, GLint& cached_member) {
++    const auto value = view->limits.find(pname);
++    if (value != view->limits.end()) {
++      cached_member = base::checked_cast<GLint>(value->second);
++      return true;
++    }
++    return false;
++  };
++  override_if_present(GL_MAX_TEXTURE_SIZE, max_texture_size_);
++  override_if_present(GL_MAX_CUBE_MAP_TEXTURE_SIZE, max_cube_map_texture_size_);
++  override_if_present(GL_MAX_3D_TEXTURE_SIZE, max3d_texture_size_);
++  override_if_present(GL_MAX_ARRAY_TEXTURE_LAYERS, max_array_texture_layers_);
++  override_if_present(GL_MAX_RENDERBUFFER_SIZE, max_renderbuffer_size_);
++  override_if_present(GL_MAX_VIEWPORT_DIMS, max_viewport_dims_[0]);
++  max_viewport_dims_[1] = max_viewport_dims_[0];
++  override_if_present(GL_MAX_TEXTURE_IMAGE_UNITS, max_texture_image_units_);
++  override_if_present(GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS,
++                      max_vertex_texture_image_units_);
++  override_if_present(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS,
++                      max_combined_texture_image_units_);
++  override_if_present(GL_MAX_VARYING_VECTORS, max_varying_vectors_);
++  override_if_present(GL_MAX_VERTEX_UNIFORM_VECTORS,
++                      max_vertex_uniform_vectors_);
++  override_if_present(GL_MAX_FRAGMENT_UNIFORM_VECTORS,
++                      max_fragment_uniform_vectors_);
++  if (IsWebGL2()) {
++    // Keep the remaining dual-read (exposure + validation) WebGL2 rows on the
++    // same cached view. The *_view_ members default to 0 = "no view applied"
++    // and every reader treats 0 as native fallback.
++    const auto uniform_bindings =
++        view->limits.find(GL_MAX_UNIFORM_BUFFER_BINDINGS);
++    if (uniform_bindings != view->limits.end()) {
++      max_uniform_buffer_bindings_ =
++          max_uniform_buffer_bindings_view_ =
++              base::checked_cast<GLint>(uniform_bindings->second);
++    }
++    const auto transform_feedback_attribs =
++        view->limits.find(GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS);
++    if (transform_feedback_attribs != view->limits.end()) {
++      max_transform_feedback_separate_attribs_view_ =
++          base::checked_cast<GLint>(transform_feedback_attribs->second);
++    }
++    override_if_present(GL_MAX_SAMPLES, max_samples_view_);
++    override_if_present(GL_MAX_DRAW_BUFFERS, max_draw_buffers_view_);
++    override_if_present(GL_MAX_COLOR_ATTACHMENTS, max_color_attachments_view_);
++  }
++
++  max_texture_level_ =
++      WebGLTexture::ComputeLevelCount(max_texture_size_, max_texture_size_, 1);
++  if (IsWebGL2()) {
++    max3d_texture_level_ = WebGLTexture::ComputeLevelCount(
++        max3d_texture_size_, max3d_texture_size_, max3d_texture_size_);
++  }
++  max_cube_map_texture_level_ = WebGLTexture::ComputeLevelCount(
++      max_cube_map_texture_size_, max_cube_map_texture_size_, 1);
++
++  // Automatic renderer canonicalization follows the same gate chain, hashed
++  // on the WebGLCapability domain; kUnknown fails open and leaves the native
++  // strings.
++  automatic_renderer_info_ = helium_noise::SelectCanonicalRendererInfo(
++      profile_hash,
++      helium_noise::ClassifyRenderer(
++      reinterpret_cast<const char*>(ContextGL()->GetString(GL_VENDOR)),
++      reinterpret_cast<const char*>(ContextGL()->GetString(GL_RENDERER))));
++}
++
+ void WebGLRenderingContextBase::SetupFlags() {
+   DCHECK(GetDrawingBuffer());
+   if (canvas()) {
+@@ -4061,27 +4528,29 @@ ScriptValue WebGLRenderingContextBase::g
+     case GL_LINE_WIDTH:
+       return GetFloatParameter(script_state, pname);
+     case GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS:
+-      return GetIntParameter(script_state, pname);
++      return WebGLAny(script_state, max_combined_texture_image_units_);
+     case GL_MAX_CUBE_MAP_TEXTURE_SIZE:
+-      return GetIntParameter(script_state, pname);
++      return WebGLAny(script_state, max_cube_map_texture_size_);
+     case GL_MAX_FRAGMENT_UNIFORM_VECTORS:
+-      return GetIntParameter(script_state, pname);
++      return WebGLAny(script_state, max_fragment_uniform_vectors_);
+     case GL_MAX_RENDERBUFFER_SIZE:
+-      return GetIntParameter(script_state, pname);
++      return WebGLAny(script_state, max_renderbuffer_size_);
+     case GL_MAX_TEXTURE_IMAGE_UNITS:
+-      return GetIntParameter(script_state, pname);
++      return WebGLAny(script_state, max_texture_image_units_);
+     case GL_MAX_TEXTURE_SIZE:
+-      return GetIntParameter(script_state, pname);
++      return WebGLAny(script_state, max_texture_size_);
+     case GL_MAX_VARYING_VECTORS:
+-      return GetIntParameter(script_state, pname);
++      return WebGLAny(script_state, max_varying_vectors_);
+     case GL_MAX_VERTEX_ATTRIBS:
+-      return GetIntParameter(script_state, pname);
++      return WebGLAny(script_state, static_cast<unsigned>(max_vertex_attribs_));
+     case GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS:
+-      return GetIntParameter(script_state, pname);
++      return WebGLAny(script_state, max_vertex_texture_image_units_);
+     case GL_MAX_VERTEX_UNIFORM_VECTORS:
+-      return GetIntParameter(script_state, pname);
++      return WebGLAny(script_state, max_vertex_uniform_vectors_);
+     case GL_MAX_VIEWPORT_DIMS:
+-      return GetWebGLIntArrayParameter(script_state, pname);
++      return WebGLAny(
++          script_state,
++          DOMInt32Array::Create(base::span(max_viewport_dims_)));
+     case GL_PACK_ALIGNMENT:
+       return GetIntParameter(script_state, pname);
+     case GL_POLYGON_OFFSET_FACTOR:
+@@ -4193,6 +4662,11 @@ ScriptValue WebGLRenderingContextBase::g
+       if (ExtensionEnabled(kWebGLDebugRendererInfoName)) {
+         if (base::FeatureList::IsEnabled(blink::features::kSpoofWebGLInfo))
+           return WebGLAny(script_state, String(blink::features::kSpoofWebGLRendererParam.Get()));
++        if (automatic_renderer_info_) {
++          return WebGLAny(
++              script_state,
++              String::FromUtf8(automatic_renderer_info_->renderer));
++        }
+         return WebGLAny(script_state,
+                         String(ContextGL()->GetString(GL_RENDERER)));
+       }
+@@ -4204,6 +4678,11 @@ ScriptValue WebGLRenderingContextBase::g
+       if (ExtensionEnabled(kWebGLDebugRendererInfoName)) {
+         if (base::FeatureList::IsEnabled(blink::features::kSpoofWebGLInfo))
+           return WebGLAny(script_state, String(blink::features::kSpoofWebGLVendorParam.Get()));
++        if (automatic_renderer_info_) {
++          return WebGLAny(
++              script_state,
++              String::FromUtf8(automatic_renderer_info_->vendor));
++        }
+         return WebGLAny(script_state,
+                         String(ContextGL()->GetString(GL_VENDOR)));
+       }
+@@ -5351,6 +5830,7 @@ void WebGLRenderingContextBase::ReadPixe
+     }
+     ContextGL()->ReadPixels(x, y, width, height, format, type, data);
+   }
++  ApplyReadbackNoise(GetExecutionContext(), format, type, width, height, data);
+ }
+ 
+ void WebGLRenderingContextBase::RenderbufferStorageImpl(
+@@ -9218,6 +9698,12 @@ GLint WebGLRenderingContextBase::MaxDraw
+   if (!max_color_attachments_)
+     ContextGL()->GetIntegerv(GL_MAX_COLOR_ATTACHMENTS_EXT,
+                              &max_color_attachments_);
++  if (IsWebGL2() && max_draw_buffers_view_ > 0) {
++    // When the capability view applies, exposure uses its view-driven pair so
++    // exposure and validation stay consistent.
++    max_draw_buffers_ = max_draw_buffers_view_;
++    max_color_attachments_ = max_color_attachments_view_;
++  }
+   // WEBGL_draw_buffers requires MAX_COLOR_ATTACHMENTS >= MAX_DRAW_BUFFERS.
+   return std::min(max_draw_buffers_, max_color_attachments_);
+ }
+@@ -9229,6 +9715,9 @@ GLint WebGLRenderingContextBase::MaxColo
+   if (!max_color_attachments_)
+     ContextGL()->GetIntegerv(GL_MAX_COLOR_ATTACHMENTS_EXT,
+                              &max_color_attachments_);
++  if (IsWebGL2() && max_color_attachments_view_ > 0) {
++    max_color_attachments_ = max_color_attachments_view_;
++  }
+   return max_color_attachments_;
+ }
+ 
+Index: src/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h
+===================================================================
+--- src.orig/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h
++++ src/third_party/blink/renderer/modules/webgl/webgl_rendering_context_base.h
+@@ -27,8 +27,10 @@
+ #define THIRD_PARTY_BLINK_RENDERER_MODULES_WEBGL_WEBGL_RENDERING_CONTEXT_BASE_H_
+ 
+ #include <array>
++#include <cstdint>
+ #include <memory>
+ #include <optional>
++#include <vector>
+ 
+ #include "base/byte_size.h"
+ #include "base/check_op.h"
+@@ -43,6 +45,7 @@
+ #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_union_htmlcanvaselement_offscreencanvas.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_webgl_context_attributes.h"
++#include "third_party/blink/renderer/core/helium_noise/webgl_capability_policy.h"
+ #include "third_party/blink/renderer/core/html/canvas/canvas_context_creation_attributes_core.h"
+ #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
+ #include "third_party/blink/renderer/core/layout/content_change_type.h"
+@@ -608,6 +611,31 @@ class MODULES_EXPORT WebGLRenderingConte
+ 
+   unsigned MaxVertexAttribs() const { return max_vertex_attribs_; }
+ 
++  // Unmasked WEBGL_debug_renderer_info strings after the vendored spoof
++  // branch and any automatic capability-policy canonicalization. Exposure and
++  // validation must keep reading the same per-context values.
++  static blink::String GetUnmaskedVendorForTesting(
++      ExecutionContext* execution_context);
++  static blink::String GetUnmaskedRendererForTesting(
++      ExecutionContext* execution_context);
++
++  // Wraps the post-ReadPixels noise boundary for tests; packed or ambiguous
++  // formats must leave |pixels| byte-identical.
++  static void ApplyReadbackNoiseForTesting(ExecutionContext* execution_context,
++                                           GLenum format,
++                                           GLenum type,
++                                           GLsizei width,
++                                           GLsizei height,
++                                           void* pixels);
++
++  // Deterministic drawing-buffer readbacks in top-down row order: the native
++  // one skips the noise boundary, the transferToImageBitmap one applies the
++  // WebGL-gated noise. Test-only.
++  static std::vector<uint8_t> NativeTransferPixelsForTesting(
++      ExecutionContext* execution_context);
++  static std::vector<uint8_t> TransferToImageBitmapPixelsForTesting(
++      ExecutionContext* execution_context);
++
+   void Trace(Visitor*) const override;
+ 
+   // Returns approximate gpu memory allocated.
+@@ -919,12 +947,62 @@ class MODULES_EXPORT WebGLRenderingConte
+   GLint max_cube_map_texture_level_;
+   GLint max3d_texture_level_;
+ 
++  // Capability-view overlays from the helium WebGL policy. When the gate
++  // chain fails, these stay at their native values (fail open). Computed
++  // once during InitializeNewContext() and read by both getParameter() and
++  // validation so exposure and validation share one source of truth.
++  GLint max_texture_image_units_;
++  GLint max_vertex_texture_image_units_;
++  GLint max_combined_texture_image_units_;
++  GLint max_varying_vectors_;
++  GLint max_vertex_uniform_vectors_;
++  GLint max_fragment_uniform_vectors_;
++  // WebGL2-only rows; unused (and left native) on WebGL 1.
++  GLint max_draw_buffers_view_;
++  GLint max_color_attachments_view_;
++  GLint max_samples_view_;
++  GLint max_transform_feedback_interleaved_components_view_;
++  GLint max_transform_feedback_separate_attribs_view_;
++  GLint max_transform_feedback_separate_components_view_;
++  GLint max_uniform_buffer_bindings_view_;
++  GLint64 max_uniform_block_size_view_;
++  GLint max_combined_uniform_blocks_view_;
++  GLint max_vertex_uniform_blocks_view_;
++  GLint max_vertex_uniform_components_view_;
++  GLint max_fragment_uniform_blocks_view_;
++  GLint max_fragment_uniform_components_view_;
++  GLint64 max_combined_vertex_uniform_components_view_;
++  GLint64 max_combined_fragment_uniform_components_view_;
++  GLint max_varying_components_view_;
++
+   GLint max_draw_buffers_;
+   GLint max_color_attachments_;
+   GLenum back_draw_buffer_;
+   bool draw_buffers_web_gl_requirements_checked_;
+   bool draw_buffers_supported_;
+ 
++  // Automatic capability-policy renderer identity, nullopt when the policy
++  // fails open (gate chain or classification). The vendored spoof branch
++  // always takes precedence over these.
++  std::optional<helium_noise::CanonicalRendererInfo> automatic_renderer_info_;
++
++  // Cached uniform-buffer binding limit shared with the WebGL2 subclass so
++  // the indexed uniform buffer vector is resized from the capability view
++  // when one applies.
++  GLint max_uniform_buffer_bindings_ = 0;
++
++  // Computes the cached capability view once during InitializeNewContext();
++  // gates: master -> kHeliumNoiseWebGL -> non-null profile.
++  void ApplyHeliumCapabilityView();
++  // Wraps the shared post-ReadPixels noise boundary; unsupported formats and
++  // gate failures leave the bytes untouched.
++  static void ApplyReadbackNoise(ExecutionContext* execution_context,
++                                 GLenum format,
++                                 GLenum type,
++                                 GLsizei width,
++                                 GLsizei height,
++                                 uint8_t* pixels);
++
+   GLenum read_buffer_of_default_framebuffer_;
+ 
+   GLint pack_alignment_ = 4;

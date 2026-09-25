@@ -1,0 +1,757 @@
+Index: src/third_party/blink/renderer/core/frame/screen.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/frame/screen.cc
++++ src/third_party/blink/renderer/core/frame/screen.cc
+@@ -27,6 +27,7 @@
+  */
+ 
+ #include "third_party/blink/renderer/core/frame/screen.h"
++#include "third_party/blink/renderer/core/helium_noise/geometry_adapter.h"
+ 
+ #include "base/numerics/safe_conversions.h"
+ #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
+@@ -165,6 +166,14 @@ gfx::Rect Screen::GetRect(bool available
+     return gfx::Rect();
+   LocalFrame* frame = DomWindow()->GetFrame();
+   const display::ScreenInfo& screen_info = GetScreenInfo();
++  // One coupled view governs screen/available; it leaves the physical-pixel
++  // quirk to this consumer on its native return path.
++  if (auto view = helium_noise::GeometryViewForFrame(*frame, screen_info)) {
++    gfx::Rect rect = available ? view->available_dip : view->screen_dip;
++    if (frame->GetSettings()->GetReportScreenSizeInPhysicalPixelsQuirk())
++      return gfx::ScaleToRoundedRect(rect, screen_info.device_scale_factor);
++    return rect;
++  }
+   gfx::Rect rect = available ? screen_info.available_rect : screen_info.rect;
+   if (frame->GetSettings()->GetReportScreenSizeInPhysicalPixelsQuirk())
+     return gfx::ScaleToRoundedRect(rect, screen_info.device_scale_factor);
+Index: src/third_party/blink/renderer/core/helium_noise/build.gni
+===================================================================
+--- src.orig/third_party/blink/renderer/core/helium_noise/build.gni
++++ src/third_party/blink/renderer/core/helium_noise/build.gni
+@@ -15,6 +15,10 @@ blink_core_sources_helium_noise = [
+   "text_policy.h",
+   "font_cohort.cc",
+   "font_cohort.h",
++  "geometry_policy.cc",
++  "geometry_policy.h",
++  "geometry_adapter.cc",
++  "geometry_adapter.h",
+ ]
+ 
+ blink_core_tests_helium_noise = [
+@@ -23,4 +27,5 @@ blink_core_tests_helium_noise = [
+   "webgl_capability_policy_test.cc",
+   "text_policy_test.cc",
+   "font_cohort_test.cc",
++  "geometry_policy_test.cc",
+ ]
+Index: src/third_party/blink/renderer/core/helium_noise/geometry_adapter.cc
+===================================================================
+--- /dev/null
++++ src/third_party/blink/renderer/core/helium_noise/geometry_adapter.cc
+@@ -0,0 +1,75 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "third_party/blink/renderer/core/helium_noise/geometry_adapter.h"
++
++#include "base/feature_list.h"
++#include "third_party/blink/public/common/features.h"
++#include "third_party/blink/renderer/core/frame/local_dom_window.h"
++#include "third_party/blink/renderer/core/frame/local_frame.h"
++#include "third_party/blink/renderer/core/frame/local_frame_view.h"
++#include "third_party/blink/renderer/core/frame/settings.h"
++#include "third_party/blink/renderer/core/helium_noise/helium_noise_profile.h"
++#include "third_party/blink/renderer/core/page/chrome_client.h"
++#include "ui/display/screen_info.h"
++#include "ui/gfx/geometry/size_f.h"
++#include "third_party/blink/renderer/core/page/page.h"
++#include "ui/gfx/geometry/size.h"
++
++namespace blink {
++namespace helium_noise {
++
++namespace {
++
++// Gathers native geometry without calling any exposed accessor that routes
++// through this adapter (no recursion). Units are direct DIP/CSS-like
++// ScreenInfo and viewport values; physical-pixel quirks stay with the
++// consumers exactly as before.
++GeometryInputs GatherNativeGeometryWithoutCallingExposedAccessors(
++    LocalFrame& frame,
++    const display::ScreenInfo& screen_info) {
++  Page* page = frame.GetPage();
++  ChromeClient& chrome_client = page->GetChromeClient();
++  GeometryInputs native;
++  native.screen_dip = screen_info.rect;
++  native.available_dip = screen_info.available_rect;
++  native.window_dip = chrome_client.RootWindowRect(frame);
++  const gfx::SizeF viewport_mq = frame.View()->ViewportSizeForMediaQueries();
++  // innerWidth/innerHeight adjust the raw viewport by the layout zoom with
++  // the same absolute-zoom behavior; replicate without calling them.
++  native.viewport_css = gfx::Size(
++      static_cast<int>(static_cast<double>(viewport_mq.width()) /
++                       frame.LayoutZoomFactor()),
++      static_cast<int>(static_cast<double>(viewport_mq.height()) /
++                       frame.LayoutZoomFactor()));
++  // Exact Chromium 151 native DPR: inspector override times layout zoom.
++  native.device_pixel_ratio =
++      page->InspectorDeviceScaleFactorOverride() * frame.LayoutZoomFactor();
++  return native;
++}
++
++}  // namespace
++
++std::optional<GeometryView> GeometryViewForFrame(
++    LocalFrame& frame,
++    const display::ScreenInfo& screen_info) {
++  if (!base::FeatureList::IsEnabled(features::kHeliumNoise) ||
++      !base::FeatureList::IsEnabled(features::kHeliumNoiseDisplay)) {
++    return std::nullopt;
++  }
++  auto* profile = HeliumNoiseProfile::From(frame.DomWindow());
++  if (!profile || !frame.GetPage() || !frame.View()) {
++    return std::nullopt;
++  }
++  return ComputeGeometryView(
++      profile->Hash(ProfileDomain::kDisplay),
++      GatherNativeGeometryWithoutCallingExposedAccessors(frame, screen_info));
++}
++
++}  // namespace helium_noise
++}  // namespace blink
+\ No newline at end of file
+Index: src/third_party/blink/renderer/core/helium_noise/geometry_adapter.h
+===================================================================
+--- /dev/null
++++ src/third_party/blink/renderer/core/helium_noise/geometry_adapter.h
+@@ -0,0 +1,36 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_GEOMETRY_ADAPTER_H_
++#define THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_GEOMETRY_ADAPTER_H_
++
++#include <cstdint>
++#include <optional>
++
++#include "third_party/blink/renderer/core/core_export.h"
++#include "third_party/blink/renderer/core/helium_noise/geometry_policy.h"
++#include "ui/display/screen_info.h"
++#include "ui/display/screen_info.h"
++
++namespace blink {
++
++class LocalFrame;
++
++namespace helium_noise {
++
++// One adapter seam: master -> display gate -> profile -> one coupled
++// geometry view for the frame's current native inputs. Returns nullopt on
++// any gate, profile, or validation failure so callers use native behavior.
++CORE_EXPORT std::optional<GeometryView> GeometryViewForFrame(
++    LocalFrame& frame,
++    const display::ScreenInfo& screen_info);
++
++}  // namespace helium_noise
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_GEOMETRY_ADAPTER_H_
+\ No newline at end of file
+Index: src/third_party/blink/renderer/core/helium_noise/geometry_policy.cc
+===================================================================
+--- /dev/null
++++ src/third_party/blink/renderer/core/helium_noise/geometry_policy.cc
+@@ -0,0 +1,224 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "third_party/blink/renderer/core/helium_noise/geometry_policy.h"
++
++#include <cmath>
++
++#include "third_party/blink/renderer/core/helium_noise/helium_noise_hash.h"
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
++
++namespace blink {
++namespace helium_noise {
++
++namespace {
++
++// Exact ordered buckets; only the largest two eligible values are ever
++// selected.
++constexpr int kWidthBuckets[] = {800,  1024, 1280, 1366, 1440, 1536,
++                                 1600, 1920, 2560, 3200, 3840};
++constexpr int kHeightBuckets[] = {600,  720,  768,  800,  900,  1024,
++                                  1080, 1200, 1440, 1600, 1800, 2160};
++constexpr double kDprBuckets[] = {1.0,  1.25, 1.5,  1.75, 2.0,
++                                  2.25, 2.5,  3.0,  3.5,  4.0};
++
++// Distinct per-field tags keep derived fields from sharing a rotation.
++constexpr uint64_t kTagScreenWidth = 0x7700000000000001ULL;
++constexpr uint64_t kTagScreenHeight = 0x7700000000000003ULL;
++constexpr uint64_t kTagAvailableWidth = 0x7700000000000005ULL;
++constexpr uint64_t kTagAvailableHeight = 0x7700000000000009ULL;
++constexpr uint64_t kTagWindowWidth = 0x770000000000000bULL;
++constexpr uint64_t kTagWindowHeight = 0x770000000000000dULL;
++constexpr uint64_t kTagViewportWidth = 0x770000000000000fULL;
++constexpr uint64_t kTagViewportHeight = 0x7700000000000013ULL;
++constexpr uint64_t kTagWindowX = 0x7700000000000017ULL;
++constexpr uint64_t kTagWindowY = 0x7700000000000019ULL;
++constexpr uint64_t kTagDpr = 0x770000000000001bULL;
++
++int SelectBucket(uint64_t profile_hash,
++                 uint64_t field_tag,
++                 int native,
++                 const int* buckets,
++                 size_t bucket_count) {
++  if (native <= 0) {
++    return native;
++  }
++  int best = 0;
++  int second = 0;
++  size_t seen = 0;
++  for (size_t i = 0; i < bucket_count; ++i) {
++    if (buckets[i] <= native) {
++      if (seen == 0) {
++        best = buckets[i];
++        seen = 1;
++      } else if (seen == 1) {
++        second = best;
++        best = buckets[i];
++        seen = 2;
++      } else {
++        second = best;
++        best = buckets[i];
++      }
++    }
++  }
++  if (seen == 0) {
++    return native;
++  }
++  if (seen == 1) {
++    return best;
++  }
++  HeliumNoiseHash hash{HeliumNoiseToken(profile_hash)};
++  hash.Update(field_tag);
++  return hash.GetValueBelow(2) == 0 ? second : best;
++}
++
++double SelectDpr(uint64_t profile_hash, double native) {
++  if (native < 1.0 || !std::isfinite(native)) {
++    return native;
++  }
++  double best = 0.0;
++  double second = 0.0;
++  size_t seen = 0;
++  for (const double bucket : kDprBuckets) {
++    if (bucket <= native) {
++      if (seen == 0) {
++        best = bucket;
++        seen = 1;
++      } else if (seen == 1) {
++        second = best;
++        best = bucket;
++        seen = 2;
++      } else {
++        second = best;
++        best = bucket;
++      }
++    }
++  }
++  if (seen == 0) {
++    return native;
++  }
++  if (seen == 1) {
++    return best;
++  }
++  HeliumNoiseHash hash{HeliumNoiseToken(profile_hash)};
++  hash.Update(kTagDpr);
++  return hash.GetValueBelow(2) == 0 ? second : best;
++}
++
++bool Positive(const gfx::Rect& rect) {
++  return rect.width() > 0 && rect.height() > 0;
++}
++
++}  // namespace
++
++std::optional<GeometryView> ComputeGeometryView(uint64_t profile_hash,
++                                                const GeometryInputs& native) {
++  // One coupled validation of the native state; all consumers fail closed
++  // together rather than partially.
++  if (!Positive(native.screen_dip) || !Positive(native.available_dip) ||
++      !Positive(native.window_dip) || native.viewport_css.IsEmpty() ||
++      native.viewport_css.width() <= 0 || native.viewport_css.height() <= 0) {
++    return std::nullopt;
++  }
++  if (!std::isfinite(native.device_pixel_ratio) ||
++      native.device_pixel_ratio < 1.0) {
++    return std::nullopt;
++  }
++  if (!native.screen_dip.Contains(native.available_dip)) {
++    return std::nullopt;
++  }
++
++  // Screen: dimensions from buckets, origin unchanged.
++  const int screen_w = SelectBucket(profile_hash, kTagScreenWidth,
++                                    native.screen_dip.width(), kWidthBuckets,
++                                    std::size(kWidthBuckets));
++  const int screen_h = SelectBucket(profile_hash, kTagScreenHeight,
++                                    native.screen_dip.height(), kHeightBuckets,
++                                    std::size(kHeightBuckets));
++  const gfx::Rect view_screen(native.screen_dip.origin(),
++                              gfx::Size(screen_w, screen_h));
++
++  // Available: largest-two buckets against the native available rect, then
++  // clamped to fit inside the selected screen (right/bottom anchors
++  // preserved).
++  const int avail_w = SelectBucket(profile_hash, kTagAvailableWidth,
++                                   native.available_dip.width(), kWidthBuckets,
++                                   std::size(kWidthBuckets));
++  const int avail_h = SelectBucket(profile_hash, kTagAvailableHeight,
++                                   native.available_dip.height(),
++                                   kHeightBuckets, std::size(kHeightBuckets));
++  const int avail_w_clamped = std::min(avail_w, view_screen.width());
++  const int avail_h_clamped = std::min(avail_h, view_screen.height());
++  const int avail_x = std::max(view_screen.x(),
++                               std::min(native.available_dip.x(),
++                                        view_screen.right() - avail_w_clamped));
++  const int avail_y = std::max(view_screen.y(),
++                               std::min(native.available_dip.y(),
++                                        view_screen.bottom() - avail_h_clamped));
++  const gfx::Rect view_available(avail_x, avail_y, avail_w_clamped,
++                                 avail_h_clamped);
++  if (!view_screen.Contains(view_available)) {
++    return std::nullopt;
++  }
++
++  // Window: dimensions buckets against native window, clamped to fit the
++  // selected screen; origin quantized toward zero to a 10-DIP grid and then
++  // clamped inside the selected screen.
++  int win_w = SelectBucket(profile_hash, kTagWindowWidth,
++                           native.window_dip.width(), kWidthBuckets,
++                           std::size(kWidthBuckets));
++  int win_h = SelectBucket(profile_hash, kTagWindowHeight,
++                           native.window_dip.height(), kHeightBuckets,
++                           std::size(kHeightBuckets));
++  win_w = std::min(win_w, view_screen.width());
++  win_h = std::min(win_h, view_screen.height());
++  const auto quantize = [](int value) {
++    return (value / 10) * 10;
++  };
++  int win_x = quantize(native.window_dip.x());
++  int win_y = quantize(native.window_dip.y());
++  win_x = std::max(view_screen.x(),
++                   std::min(win_x, view_screen.right() - win_w));
++  win_y = std::max(view_screen.y(),
++                   std::min(win_y, view_screen.bottom() - win_h));
++  const gfx::Rect view_window(win_x, win_y, win_w, win_h);
++  if (!view_screen.Contains(view_window)) {
++    return std::nullopt;
++  }
++
++  // Viewport: buckets against native viewport, clamped inside the selected
++  // window.
++  const int view_w = SelectBucket(
++      profile_hash, kTagViewportWidth, native.viewport_css.width(),
++      kWidthBuckets, std::size(kWidthBuckets));
++  const int view_h = SelectBucket(
++      profile_hash, kTagViewportHeight, native.viewport_css.height(),
++      kHeightBuckets, std::size(kHeightBuckets));
++  const gfx::Size view_viewport(std::min(view_w, view_window.width()),
++                                std::min(view_h, view_window.height()));
++
++  GeometryView out;
++  out.screen_dip = view_screen;
++  out.available_dip = view_available;
++  out.window_dip = view_window;
++  out.viewport_css = view_viewport;
++  out.device_pixel_ratio = SelectDpr(profile_hash, native.device_pixel_ratio);
++  if (!(out.device_pixel_ratio > 0.0) ||
++      !std::isfinite(out.device_pixel_ratio) ||
++      out.device_pixel_ratio > native.device_pixel_ratio) {
++    return std::nullopt;
++  }
++  if (out.viewport_css.width() > native.viewport_css.width() ||
++      out.viewport_css.height() > native.viewport_css.height()) {
++    return std::nullopt;
++  }
++  return out;
++}
++
++}  // namespace helium_noise
++}  // namespace blink
+\ No newline at end of file
+Index: src/third_party/blink/renderer/core/helium_noise/geometry_policy.h
+===================================================================
+--- /dev/null
++++ src/third_party/blink/renderer/core/helium_noise/geometry_policy.h
+@@ -0,0 +1,50 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_GEOMETRY_POLICY_H_
++#define THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_GEOMETRY_POLICY_H_
++
++#include <cstdint>
++#include <optional>
++
++#include "third_party/blink/renderer/core/core_export.h"
++#include "ui/gfx/geometry/rect.h"
++#include "ui/gfx/geometry/size.h"
++
++namespace blink {
++namespace helium_noise {
++
++// Native, un-noised geometry inputs in direct DIP/CSS-like units.
++struct GeometryInputs {
++  gfx::Rect screen_dip;
++  gfx::Rect available_dip;
++  gfx::Rect window_dip;
++  gfx::Size viewport_css;
++  double device_pixel_ratio;
++};
++
++// Selected geometry view; all consumers derive their exposed values from one
++// validated result.
++struct GeometryView {
++  gfx::Rect screen_dip;
++  gfx::Rect available_dip;
++  gfx::Rect window_dip;
++  gfx::Size viewport_css;
++  double device_pixel_ratio;
++};
++
++// Selects the one coupled geometry view for the profile hash and native
++// inputs, or fails closed as a whole on any invalid coupled state.
++CORE_EXPORT std::optional<GeometryView> ComputeGeometryView(
++    uint64_t profile_hash,
++    const GeometryInputs& native);
++
++}  // namespace helium_noise
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_GEOMETRY_POLICY_H_
+\ No newline at end of file
+Index: src/third_party/blink/renderer/core/helium_noise/geometry_policy_test.cc
+===================================================================
+--- /dev/null
++++ src/third_party/blink/renderer/core/helium_noise/geometry_policy_test.cc
+@@ -0,0 +1,85 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "third_party/blink/renderer/core/helium_noise/geometry_policy.h"
++
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace blink {
++namespace helium_noise {
++
++TEST(GeometryPolicyTest, ViewIsCapabilitySafeAndContained) {
++  GeometryInputs native{
++      .screen_dip = gfx::Rect(0, 0, 1920, 1080),
++      .available_dip = gfx::Rect(0, 0, 1920, 1040),
++      .window_dip = gfx::Rect(110, 90, 1400, 900),
++      .viewport_css = gfx::Size(1380, 820),
++      .device_pixel_ratio = 1.5,
++  };
++  const auto view = ComputeGeometryView(17, native);
++  ASSERT_TRUE(view);
++  EXPECT_LE(view->screen_dip.width(), native.screen_dip.width());
++  EXPECT_LE(view->screen_dip.height(), native.screen_dip.height());
++  EXPECT_LE(view->device_pixel_ratio, native.device_pixel_ratio);
++  EXPECT_TRUE(view->screen_dip.Contains(view->available_dip));
++  EXPECT_TRUE(view->screen_dip.Contains(view->window_dip));
++  EXPECT_LE(view->viewport_css.width(), native.viewport_css.width());
++  EXPECT_LE(view->viewport_css.height(), native.viewport_css.height());
++  EXPECT_LE(view->viewport_css.width(), view->window_dip.width());
++  EXPECT_LE(view->viewport_css.height(), view->window_dip.height());
++}
++
++TEST(GeometryPolicyTest, InvalidCoupledInputFailsOpenAsOneView) {
++  GeometryInputs native{
++      .screen_dip = gfx::Rect(0, 0, 0, 1080),
++      .available_dip = gfx::Rect(0, 0, 1920, 1040),
++      .window_dip = gfx::Rect(0, 0, 1200, 800),
++      .viewport_css = gfx::Size(1180, 720),
++      .device_pixel_ratio = 1.5,
++  };
++  EXPECT_FALSE(ComputeGeometryView(17, native));
++}
++
++TEST(GeometryPolicyTest, DeterministicForSameInputs) {
++  const GeometryInputs native{
++      .screen_dip = gfx::Rect(0, 0, 2560, 1440),
++      .available_dip = gfx::Rect(0, 0, 2560, 1400),
++      .window_dip = gfx::Rect(40, 20, 2000, 1300),
++      .viewport_css = gfx::Size(1990, 1390),
++      .device_pixel_ratio = 2.0,
++  };
++  const auto first = ComputeGeometryView(17, native);
++  const auto second = ComputeGeometryView(17, native);
++  ASSERT_TRUE(first);
++  ASSERT_TRUE(second);
++  EXPECT_EQ(first->screen_dip, second->screen_dip);
++  EXPECT_EQ(first->window_dip.width(), second->window_dip.width());
++  EXPECT_EQ(first->device_pixel_ratio, second->device_pixel_ratio);
++}
++
++TEST(GeometryPolicyTest, NeverExceedsNative) {
++  GeometryInputs native{
++      .screen_dip = gfx::Rect(0, 0, 1920, 1080),
++      .available_dip = gfx::Rect(0, 0, 1920, 1040),
++      .window_dip = gfx::Rect(110, 90, 1400, 900),
++      .viewport_css = gfx::Size(1380, 820),
++      .device_pixel_ratio = 1.5,
++  };
++  const auto view = ComputeGeometryView(17, native);
++  ASSERT_TRUE(view);
++  EXPECT_LE(view->available_dip.width(), native.available_dip.width());
++  EXPECT_LE(view->available_dip.height(), native.available_dip.height());
++  EXPECT_LE(view->window_dip.width(), native.window_dip.width() +
++                                          10);  // quantization slack
++  EXPECT_LE(view->window_dip.height(), native.window_dip.height() + 10);
++  EXPECT_DOUBLE_EQ(view->screen_dip.x(), native.screen_dip.x());
++  EXPECT_DOUBLE_EQ(view->screen_dip.y(), native.screen_dip.y());
++}
++
++}  // namespace helium_noise
++}  // namespace blink
+\ No newline at end of file
+Index: src/third_party/blink/renderer/core/css/media_values.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/css/media_values.cc
++++ src/third_party/blink/renderer/core/css/media_values.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "third_party/blink/renderer/core/css/media_values.h"
++#include "third_party/blink/renderer/core/helium_noise/geometry_adapter.h"
+ 
+ #include "third_party/blink/public/common/css/scripting.h"
+ #include "third_party/blink/renderer/core/css/css_resolution_units.h"
+@@ -110,6 +111,12 @@ double MediaValues::CalculateViewportWid
+   DCHECK(frame);
+   DCHECK(frame->View());
+   DCHECK(frame->GetDocument());
++  if (auto* page = frame->GetPage()) {
++    if (auto view = helium_noise::GeometryViewForFrame(
++            *frame, page->GetChromeClient().GetScreenInfo(*frame))) {
++      return view->viewport_css.width();
++    }
++  }
+   return frame->View()->ViewportSizeForMediaQueries().width();
+ }
+ 
+@@ -117,6 +124,12 @@ double MediaValues::CalculateViewportHei
+   DCHECK(frame);
+   DCHECK(frame->View());
+   DCHECK(frame->GetDocument());
++  if (auto* page = frame->GetPage()) {
++    if (auto view = helium_noise::GeometryViewForFrame(
++            *frame, page->GetChromeClient().GetScreenInfo(*frame))) {
++      return view->viewport_css.height();
++    }
++  }
+   return frame->View()->ViewportSizeForMediaQueries().height();
+ }
+ 
+@@ -166,6 +179,9 @@ int MediaValues::CalculateDeviceWidth(Lo
+   DCHECK(frame && frame->View() && frame->GetSettings() && frame->GetPage());
+   const display::ScreenInfo& screen_info =
+       frame->GetPage()->GetChromeClient().GetScreenInfo(*frame);
++  if (auto view = helium_noise::GeometryViewForFrame(*frame, screen_info)) {
++    return view->screen_dip.width();
++  }
+   int device_width = screen_info.rect.width();
+   if (frame->GetSettings()->GetReportScreenSizeInPhysicalPixelsQuirk()) {
+     device_width = static_cast<int>(
+@@ -178,6 +194,9 @@ int MediaValues::CalculateDeviceHeight(L
+   DCHECK(frame && frame->View() && frame->GetSettings() && frame->GetPage());
+   const display::ScreenInfo& screen_info =
+       frame->GetPage()->GetChromeClient().GetScreenInfo(*frame);
++  if (auto view = helium_noise::GeometryViewForFrame(*frame, screen_info)) {
++    return view->screen_dip.height();
++  }
+   int device_height = screen_info.rect.height();
+   if (frame->GetSettings()->GetReportScreenSizeInPhysicalPixelsQuirk()) {
+     device_height = static_cast<int>(
+@@ -193,6 +212,11 @@ bool MediaValues::CalculateStrictMode(Lo
+ }
+ 
+ float MediaValues::CalculateDevicePixelRatio(LocalFrame* frame) {
++  DCHECK(frame && frame->GetPage());
++  if (auto view = helium_noise::GeometryViewForFrame(
++          *frame, frame->GetPage()->GetChromeClient().GetScreenInfo(*frame))) {
++    return static_cast<float>(view->device_pixel_ratio);
++  }
+   return frame->DevicePixelRatio();
+ }
+ 
+Index: src/third_party/blink/renderer/core/frame/local_dom_window.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/frame/local_dom_window.cc
++++ src/third_party/blink/renderer/core/frame/local_dom_window.cc
+@@ -25,6 +25,7 @@
+  */
+ 
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
++#include "third_party/blink/renderer/core/helium_noise/geometry_adapter.h"
+ 
+ #include <memory>
+ #include <optional>
+@@ -1677,6 +1678,18 @@ int LocalDOMWindow::outerHeight() const
+     return 0;
+   }
+ 
++  // One coupled view governs the exposed window box; fail open to the
++  // native expression when the view is unavailable.
++  if (auto view = helium_noise::GeometryViewForFrame(
++          *frame, page->GetChromeClient().GetScreenInfo(*frame))) {
++    if (page->GetSettings().GetReportScreenSizeInPhysicalPixelsQuirk()) {
++      return static_cast<int>(lroundf(
++          view->window_dip.height() *
++          page->GetChromeClient().GetScreenInfo(*frame).device_scale_factor));
++    }
++    return view->window_dip.height();
++  }
++
+   ChromeClient& chrome_client = page->GetChromeClient();
+   if (page->GetSettings().GetReportScreenSizeInPhysicalPixelsQuirk()) {
+     return static_cast<int>(
+@@ -1704,6 +1717,17 @@ int LocalDOMWindow::outerWidth() const {
+     return 0;
+   }
+ 
++  if (auto view =
++          helium_noise::GeometryViewForFrame(
++              *frame, page->GetChromeClient().GetScreenInfo(*frame))) {
++    ChromeClient& chrome_client = page->GetChromeClient();
++    if (page->GetSettings().GetReportScreenSizeInPhysicalPixelsQuirk()) {
++      return static_cast<int>(lroundf(view->window_dip.width() *
++          page->GetChromeClient().GetScreenInfo(*frame).device_scale_factor));
++    }
++    return view->window_dip.width();
++  }
++
+   ChromeClient& chrome_client = page->GetChromeClient();
+   if (page->GetSettings().GetReportScreenSizeInPhysicalPixelsQuirk()) {
+     return static_cast<int>(
+@@ -1751,6 +1775,14 @@ int LocalDOMWindow::innerHeight() const
+     return 0;
+   }
+ 
++  if (auto view = helium_noise::GeometryViewForFrame(
++          *GetFrame(),
++          GetFrame()->GetPage()
++              ? GetFrame()->GetPage()->GetChromeClient().GetScreenInfo(
++                    *GetFrame())
++              : display::ScreenInfo())) {
++    return view->viewport_css.height();
++  }
+   return AdjustForAbsoluteZoom::AdjustInt(GetViewportSize().height(),
+                                           GetFrame()->LayoutZoomFactor());
+ }
+@@ -1760,6 +1792,14 @@ int LocalDOMWindow::innerWidth() const {
+     return 0;
+   }
+ 
++  if (auto view = helium_noise::GeometryViewForFrame(
++          *GetFrame(),
++          GetFrame()->GetPage()
++              ? GetFrame()->GetPage()->GetChromeClient().GetScreenInfo(
++                    *GetFrame())
++              : display::ScreenInfo())) {
++    return view->viewport_css.width();
++  }
+   return AdjustForAbsoluteZoom::AdjustInt(GetViewportSize().width(),
+                                           GetFrame()->LayoutZoomFactor());
+ }
+@@ -1776,6 +1816,15 @@ int LocalDOMWindow::screenX() const {
+   }
+ 
+   ChromeClient& chrome_client = page->GetChromeClient();
++  if (auto view =
++          helium_noise::GeometryViewForFrame(
++              *frame, chrome_client.GetScreenInfo(*frame))) {
++    if (page->GetSettings().GetReportScreenSizeInPhysicalPixelsQuirk()) {
++      return static_cast<int>(lroundf(view->window_dip.x() *
++          chrome_client.GetScreenInfo(*frame).device_scale_factor));
++    }
++    return view->window_dip.x();
++  }
+   if (page->GetSettings().GetReportScreenSizeInPhysicalPixelsQuirk()) {
+     return static_cast<int>(
+         lroundf(chrome_client.RootWindowRect(*frame).x() *
+@@ -1796,6 +1845,15 @@ int LocalDOMWindow::screenY() const {
+   }
+ 
+   ChromeClient& chrome_client = page->GetChromeClient();
++  if (auto view =
++          helium_noise::GeometryViewForFrame(
++              *frame, chrome_client.GetScreenInfo(*frame))) {
++    if (page->GetSettings().GetReportScreenSizeInPhysicalPixelsQuirk()) {
++      return static_cast<int>(lroundf(view->window_dip.y() *
++          chrome_client.GetScreenInfo(*frame).device_scale_factor));
++    }
++    return view->window_dip.y();
++  }
+   if (page->GetSettings().GetReportScreenSizeInPhysicalPixelsQuirk()) {
+     return static_cast<int>(
+         lroundf(chrome_client.RootWindowRect(*frame).y() *
+Index: src/third_party/blink/renderer/core/frame/local_frame.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/frame/local_frame.cc
++++ src/third_party/blink/renderer/core/frame/local_frame.cc
+@@ -29,6 +29,8 @@
+  */
+ 
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
++#include "third_party/blink/renderer/core/helium_noise/geometry_adapter.h"
++#include "third_party/blink/renderer/core/helium_noise/geometry_adapter.h"
+ 
+ #include <cstdint>
+ #include <limits>
+@@ -1843,6 +1845,14 @@ double LocalFrame::DevicePixelRatio() co
+ 
+   double ratio = page_->InspectorDeviceScaleFactorOverride();
+   ratio *= LayoutZoomFactor();
++  if (DomWindow()) {
++    if (auto view = helium_noise::GeometryViewForFrame(
++            *(const_cast<LocalFrame*>(this)),
++            page_->GetChromeClient().GetScreenInfo(
++                *(const_cast<LocalFrame*>(this))))) {
++      return view->device_pixel_ratio;
++    }
++  }
+   return ratio;
+ }
+ 

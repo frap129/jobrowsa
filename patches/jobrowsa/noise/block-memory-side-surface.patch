@@ -1,0 +1,151 @@
+# Blocks the memory-side probing surfaces that survive the existing navigator
+# fixes. performance.measureUserAgentSpecificMemory() rejects with
+# SecurityError through the existing ApiStatus::kNotAvailableDueToFlag path,
+# and navigator.storage.estimate() resolves fixed plausible values instead of
+# device-dependent numbers. Gated by the Helium Noise master feature and
+# kHeliumNoiseMemorySurface. Approach adopted from Cromite's
+# Remove-support-for-device-memory-and-cpu-recovery, reimplemented against the
+# seams present in this tree.
+
+--- a/chrome/browser/helium_flag_choices.h
++++ b/chrome/browser/helium_flag_choices.h
+@@ -37,6 +37,8 @@
+     "helium-noise-network-information";
+ constexpr const char kHeliumNoiseKeyboardLayoutCommandLine[] =
+     "helium-noise-keyboard-layout";
++constexpr const char kHeliumNoiseMemorySurfaceCommandLine[] =
++    "helium-noise-memory-surface";
+ constexpr const char kHeliumNoiseCanvasCommandLine[] = "helium-noise-canvas";
+ constexpr const char kHeliumNoiseAudioCommandLine[] = "helium-noise-audio";
+ constexpr const char kHeliumNoiseCpuCoresCommandLine[] =
+
+--- a/chrome/browser/helium_flag_entries.h
++++ b/chrome/browser/helium_flag_entries.h
+@@ -38,6 +38,11 @@
+      "Reports a fixed US-ASCII keyboard layout from "
+      "navigator.keyboard.getLayoutMap(). Helium flag.",
+      kOsAll, FEATURE_VALUE_TYPE(blink::features::kHeliumNoiseKeyboardLayout)},
++    {helium::kHeliumNoiseMemorySurfaceCommandLine,
++     "[Helium Noise] Block memory-side probing",
++     "Rejects performance.measureUserAgentSpecificMemory() and reports a "
++     "fixed storage estimate. Helium flag.",
++     kOsAll, FEATURE_VALUE_TYPE(blink::features::kHeliumNoiseMemorySurface)},
+     {helium::kHeliumNoiseCommandLine, "Helium Noise",
+      "Helium's anti-fingerprinting functionality. Adds insignificant noise to "
+      "various features to deceive fingerprinting scripts. Enabled by default, "
+
+--- a/third_party/blink/common/features.cc
++++ b/third_party/blink/common/features.cc
+@@ -83,6 +83,10 @@
+ BASE_FEATURE(kHeliumNoiseKeyboardLayout,
+              base::FEATURE_ENABLED_BY_DEFAULT);
+ 
++// Memory-side probing block for fingerprinting protection.
++BASE_FEATURE(kHeliumNoiseMemorySurface,
++             base::FEATURE_ENABLED_BY_DEFAULT);
++
+ // Controls whether to include information about the page's open popup in
+ // AIPageContent.
+ BASE_FEATURE(kAIPageContentIncludePopupWindows,
+
+--- a/third_party/blink/public/common/features.h
++++ b/third_party/blink/public/common/features.h
+@@ -52,6 +52,7 @@
+ BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHeliumNoiseDisplay);
+ BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHeliumNoiseNetworkInformation);
+ BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHeliumNoiseKeyboardLayout);
++BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHeliumNoiseMemorySurface);
+ 
+ // Controls whether to include information about the page's open popup in
+ // AIPageContent.
+
+--- a/third_party/blink/renderer/core/timing/measure_memory/measure_memory_controller.cc
++++ b/third_party/blink/renderer/core/timing/measure_memory/measure_memory_controller.cc
+@@ -7,9 +7,11 @@
+ #include <algorithm>
+ 
+ #include "base/byte_size.h"
++#include "base/feature_list.h"
+ #include "base/rand_util.h"
+ #include "components/performance_manager/public/mojom/coordination_unit.mojom-blink.h"
+ #include "services/metrics/public/cpp/ukm_builders.h"
++#include "third_party/blink/public/common/features.h"
+ #include "third_party/blink/public/platform/platform.h"
+ #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
+ #include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
+@@ -85,7 +87,17 @@
+   kNotAvailableDueToResourceCoordinator,
+ };
+ 
++// Returns whether the memory-side probing surface is blocked by Helium Noise.
++bool ShouldBlockMemorySurface() {
++  return base::FeatureList::IsEnabled(blink::features::kHeliumNoise) &&
++         base::FeatureList::IsEnabled(
++             blink::features::kHeliumNoiseMemorySurface);
++}
++
+ ApiStatus CheckMeasureMemoryAvailability() {
++  if (ShouldBlockMemorySurface()) {
++    return ApiStatus::kNotAvailableDueToFlag;
++  }
+   if (!RuntimeEnabledFeatures::PerformanceManagerInstrumentationEnabled()) {
+     return ApiStatus::kNotAvailableDueToResourceCoordinator;
+   }
+
+--- a/third_party/blink/renderer/modules/quota/storage_manager.cc
++++ b/third_party/blink/renderer/modules/quota/storage_manager.cc
+@@ -4,7 +4,9 @@
+ 
+ #include "third_party/blink/renderer/modules/quota/storage_manager.h"
+ 
++#include "base/feature_list.h"
+ #include "mojo/public/cpp/bindings/callback_helpers.h"
++#include "third_party/blink/public/common/features.h"
+ #include "third_party/blink/public/mojom/permissions/permission_status.mojom-blink.h"
+ #include "third_party/blink/public/mojom/quota/quota_types.mojom-blink.h"
+ #include "third_party/blink/public/platform/platform.h"
+@@ -41,6 +43,17 @@
+     "Internal error when calculating storage usage.";
+ const char kAbortErrorMessage[] = "The operation was aborted due to shutdown.";
+ 
++// Frozen storage estimate reported while the memory-side probing surface is
++// blocked: plausible fixed values that leak nothing about the host.
++constexpr int64_t kFrozenStorageQuotaBytes = 322122547200;  // 300 GiB
++constexpr int64_t kFrozenStorageUsageBytes = 429496729;     // ~0.4 GiB
++
++bool ShouldFreezeStorageEstimate() {
++  return base::FeatureList::IsEnabled(blink::features::kHeliumNoise) &&
++         base::FeatureList::IsEnabled(
++             blink::features::kHeliumNoiseMemorySurface);
++}
++
+ void QueryStorageUsageAndQuotaCallback(
+     ScriptPromiseResolver<StorageEstimate>* resolver,
+     mojom::blink::QuotaStatusCode status_code,
+@@ -165,6 +178,26 @@
+     return EmptyPromise();
+   }
+ 
++  if (ShouldFreezeStorageEstimate()) {
++    StorageEstimate* estimate = StorageEstimate::Create();
++    estimate->setQuota(kFrozenStorageQuotaBytes);
++    estimate->setUsage(kFrozenStorageUsageBytes);
++
++    StorageUsageDetails* details = StorageUsageDetails::Create();
++    details->setIndexedDB(0);
++    details->setCaches(0);
++    details->setServiceWorkerRegistrations(0);
++    details->setFileSystem(0);
++    estimate->setUsageDetails(details);
++
++    auto* frozen_resolver =
++        MakeGarbageCollected<ScriptPromiseResolver<StorageEstimate>>(
++            script_state, exception_state.GetContext());
++    auto frozen_promise = frozen_resolver->Promise();
++    frozen_resolver->Resolve(estimate);
++    return frozen_promise;
++  }
++
+   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver<StorageEstimate>>(
+       script_state, exception_state.GetContext());
+   auto promise = resolver->Promise();

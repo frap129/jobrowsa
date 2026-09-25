@@ -1,0 +1,174 @@
+# Normalizes navigator.keyboard.getLayoutMap() to a fixed US-ASCII
+# writing-system map so the physical keyboard layout cannot be inferred by
+# fingerprinting scripts. The renderer short-circuits the KeyboardLayoutService
+# request and resolves locally; keyboard events are untouched. Gated by the
+# Helium Noise master feature and kHeliumNoiseKeyboardLayout.
+
+--- a/chrome/browser/helium_flag_choices.h
++++ b/chrome/browser/helium_flag_choices.h
+@@ -35,6 +35,8 @@
+ constexpr const char kHeliumNoiseCommandLine[] = "helium-noise";
+ constexpr const char kHeliumNoiseNetworkInformationCommandLine[] =
+     "helium-noise-network-information";
++constexpr const char kHeliumNoiseKeyboardLayoutCommandLine[] =
++    "helium-noise-keyboard-layout";
+ constexpr const char kHeliumNoiseCanvasCommandLine[] = "helium-noise-canvas";
+ constexpr const char kHeliumNoiseAudioCommandLine[] = "helium-noise-audio";
+ constexpr const char kHeliumNoiseCpuCoresCommandLine[] =
+
+--- a/chrome/browser/helium_flag_entries.h
++++ b/chrome/browser/helium_flag_entries.h
+@@ -33,6 +33,11 @@
+      "50 ms RTT) from navigator.connection and never fires its change event. "
+      "Helium flag.",
+      kOsAll, FEATURE_VALUE_TYPE(blink::features::kHeliumNoiseNetworkInformation)},
++    {helium::kHeliumNoiseKeyboardLayoutCommandLine,
++     "[Helium Noise] Normalize keyboard layout map",
++     "Reports a fixed US-ASCII keyboard layout from "
++     "navigator.keyboard.getLayoutMap(). Helium flag.",
++     kOsAll, FEATURE_VALUE_TYPE(blink::features::kHeliumNoiseKeyboardLayout)},
+     {helium::kHeliumNoiseCommandLine, "Helium Noise",
+      "Helium's anti-fingerprinting functionality. Adds insignificant noise to "
+      "various features to deceive fingerprinting scripts. Enabled by default, "
+
+--- a/third_party/blink/common/features.cc
++++ b/third_party/blink/common/features.cc
+@@ -79,6 +79,10 @@
+ BASE_FEATURE(kHeliumNoiseNetworkInformation,
+              base::FEATURE_ENABLED_BY_DEFAULT);
+ 
++// Keyboard layout map normalization for fingerprinting protection.
++BASE_FEATURE(kHeliumNoiseKeyboardLayout,
++             base::FEATURE_ENABLED_BY_DEFAULT);
++
+ // Controls whether to include information about the page's open popup in
+ // AIPageContent.
+ BASE_FEATURE(kAIPageContentIncludePopupWindows,
+
+--- a/third_party/blink/public/common/features.h
++++ b/third_party/blink/public/common/features.h
+@@ -51,6 +51,7 @@
+ BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHeliumNoiseFonts);
+ BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHeliumNoiseDisplay);
+ BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHeliumNoiseNetworkInformation);
++BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHeliumNoiseKeyboardLayout);
+ 
+ // Controls whether to include information about the page's open popup in
+ // AIPageContent.
+
+--- a/third_party/blink/renderer/modules/keyboard/keyboard_layout.cc
++++ b/third_party/blink/renderer/modules/keyboard/keyboard_layout.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "third_party/blink/renderer/modules/keyboard/keyboard_layout.h"
+ 
++#include "base/feature_list.h"
++#include "third_party/blink/public/common/features.h"
+ #include "third_party/blink/public/platform/browser_interface_broker_proxy.h"
+ #include "third_party/blink/public/platform/platform.h"
+ #include "third_party/blink/public/platform/task_type.h"
+@@ -31,6 +33,84 @@
+ constexpr char kKeyboardMapRequestFailedErrorMsg[] =
+     "getLayoutMap() request could not be completed.";
+ 
++// US-ASCII writing-system map. The same map is reported for every host layout
++// so navigator.keyboard.getLayoutMap() cannot leak the physical keyboard
++// layout. Keys are W3C UI Events |code| values; values are the unshifted US
++// layout characters. Numpad, international and dead keys are omitted.
++struct UsAsciiKeyboardLayoutEntry {
++  const char* code;
++  const char* key;
++};
++
++constexpr UsAsciiKeyboardLayoutEntry kUsAsciiKeyboardLayout[] = {
++    {"KeyA", "a"},
++    {"KeyB", "b"},
++    {"KeyC", "c"},
++    {"KeyD", "d"},
++    {"KeyE", "e"},
++    {"KeyF", "f"},
++    {"KeyG", "g"},
++    {"KeyH", "h"},
++    {"KeyI", "i"},
++    {"KeyJ", "j"},
++    {"KeyK", "k"},
++    {"KeyL", "l"},
++    {"KeyM", "m"},
++    {"KeyN", "n"},
++    {"KeyO", "o"},
++    {"KeyP", "p"},
++    {"KeyQ", "q"},
++    {"KeyR", "r"},
++    {"KeyS", "s"},
++    {"KeyT", "t"},
++    {"KeyU", "u"},
++    {"KeyV", "v"},
++    {"KeyW", "w"},
++    {"KeyX", "x"},
++    {"KeyY", "y"},
++    {"KeyZ", "z"},
++    {"Digit0", "0"},
++    {"Digit1", "1"},
++    {"Digit2", "2"},
++    {"Digit3", "3"},
++    {"Digit4", "4"},
++    {"Digit5", "5"},
++    {"Digit6", "6"},
++    {"Digit7", "7"},
++    {"Digit8", "8"},
++    {"Digit9", "9"},
++    {"Backquote", "`"},
++    {"Minus", "-"},
++    {"Equal", "="},
++    {"BracketLeft", "["},
++    {"BracketRight", "]"},
++    {"Backslash", "\\"},
++    {"Semicolon", ";"},
++    {"Quote", "'"},
++    {"Comma", ","},
++    {"Period", "."},
++    {"Slash", "/"},
++    {"Space", " "},
++    {"Enter", "Enter"},
++    {"Tab", "Tab"},
++    {"Backspace", "Backspace"},
++};
++
++HashMap<String, String> UsAsciiKeyboardLayoutMap() {
++  HashMap<String, String> layout_map;
++  for (const auto& entry : kUsAsciiKeyboardLayout) {
++    layout_map.insert(String::FromUtf8(entry.code),
++                      String::FromUtf8(entry.key));
++  }
++  return layout_map;
++}
++
++bool ShouldNormalizeKeyboardLayout() {
++  return base::FeatureList::IsEnabled(blink::features::kHeliumNoise) &&
++         base::FeatureList::IsEnabled(
++             blink::features::kHeliumNoiseKeyboardLayout);
++}
++
+ }
+ 
+ KeyboardLayout::KeyboardLayout(ExecutionContext* context)
+@@ -47,6 +127,18 @@
+     return EmptyPromise();
+   }
+ 
++  if (ShouldNormalizeKeyboardLayout()) {
++    if (!layout_map_property_) {
++      layout_map_property_ = MakeGarbageCollected<LayoutMapProperty>(
++          ExecutionContext::From(script_state));
++    }
++    auto promise = layout_map_property_->Promise(script_state->World());
++    layout_map_property_->Resolve(
++        MakeGarbageCollected<KeyboardLayoutMap>(UsAsciiKeyboardLayoutMap()));
++    layout_map_property_ = nullptr;
++    return promise;
++  }
++
+   if (!EnsureServiceConnected()) {
+     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                       kKeyboardMapRequestFailedErrorMsg);
+

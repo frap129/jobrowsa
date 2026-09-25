@@ -105,6 +105,19 @@ trivalent/linux/disable-global-shortcuts-portal.patch
 trivalent/linux/fix-singleton-hostname.patch
 trivalent/linux/linux-gpu-sandbox.patch
 
+jobrowsa/noise/high-entropy-profile.patch
+jobrowsa/noise/canvas-profile.patch
+jobrowsa/noise/webgl-profile.patch
+jobrowsa/noise/text-profile.patch
+jobrowsa/noise/font-cohort.patch
+jobrowsa/noise/display-profile.patch
+jobrowsa/noise/normalize-network-info.patch
+jobrowsa/noise/normalize-keyboard-layout.patch
+jobrowsa/noise/block-memory-side-surface.patch
+jobrowsa/noise/windows-identity-gate.patch
+jobrowsa/noise/windows-font-identity.patch
+jobrowsa/core/address-bar-in-sidebar.patch
+
 jobrowsa/linux/compiler-hardening.patch
 jobrowsa/linux/clamp-device-memory.patch
 jobrowsa/linux/normalize-web-timezone.patch

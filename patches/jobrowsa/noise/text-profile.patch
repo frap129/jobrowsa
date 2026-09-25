@@ -1,0 +1,476 @@
+Index: src/third_party/blink/renderer/core/helium_noise/text_policy_test.cc
+===================================================================
+--- /dev/null
++++ src/third_party/blink/renderer/core/helium_noise/text_policy_test.cc
+@@ -0,0 +1,82 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "third_party/blink/renderer/core/helium_noise/text_policy.h"
++
++#include <cmath>
++#include <cstdint>
++
++#include "base/test/scoped_feature_list.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/common/features.h"
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
++#include "third_party/blink/renderer/core/dom/document.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/core/helium_noise/helium_noise_profile.h"
++#include "third_party/blink/renderer/core/page/page.h"
++#include "third_party/blink/renderer/core/testing/page_test_base.h"
++#include "ui/gfx/geometry/size.h"
++
++namespace blink {
++namespace helium_noise {
++namespace {
++
++class TextPolicyTest : public PageTestBase {
++ public:
++  void SetUp() override { PageTestBase::SetUp(gfx::Size()); }
++
++  ExecutionContext* Context() const {
++    ExecutionContext* context = GetDocument().GetExecutionContext();
++    EXPECT_TRUE(context);
++    return context;
++  }
++
++  void SetHighEntropyToken(uint64_t value) {
++    GetPage().SetHeliumNoiseTokens(
++        {{HeliumNoiseFeature::kHighEntropy, HeliumNoiseToken(value)}});
++  }
++};
++
++TEST_F(TextPolicyTest, FactorsAreStableBoundedAndAxisSeparated) {
++  const TextAxisFactors first = ComputeTextAxisFactors(17);
++  const TextAxisFactors second = ComputeTextAxisFactors(17);
++  EXPECT_EQ(first.x, second.x);
++  EXPECT_EQ(first.y, second.y);
++  EXPECT_LE(std::abs(first.x - 1.0), 1.5e-6);
++  EXPECT_LE(std::abs(first.y - 1.0), 1.5e-6);
++}
++
++TEST_F(TextPolicyTest, TextFactorsFailOpenAndFollowProfile) {
++  // Master gate off: the document must fail open to 1.0 on both axes even
++  // with a profile token present.
++  base::test::ScopedFeatureList features_off;
++  features_off.InitWithFeatureStates(
++      {{blink::features::kHeliumNoise, false},
++       {blink::features::kHeliumNoiseTextGeometry, true}});
++  SetHighEntropyToken(17);
++  EXPECT_EQ(1.0, GetDocument().GetNoiseFactorX());
++  EXPECT_EQ(1.0, GetDocument().GetNoiseFactorY());
++
++  // Full chain on: the text factors must follow the kText profile domain
++  // exactly, on both axes, and remain stable across repeated calls.
++  base::test::ScopedFeatureList features_on;
++  features_on.InitWithFeatureStates(
++      {{blink::features::kHeliumNoise, true},
++       {blink::features::kHeliumNoiseTextGeometry, true}});
++  SetHighEntropyToken(17);
++  const HeliumNoiseProfile* profile = HeliumNoiseProfile::From(Context());
++  ASSERT_NE(profile, nullptr);
++  const TextAxisFactors factors = ComputeTextAxisFactors(
++      profile->Hash(helium_noise::ProfileDomain::kText));
++  EXPECT_EQ(factors.x, GetDocument().GetNoiseFactorX());
++  EXPECT_EQ(factors.y, GetDocument().GetNoiseFactorY());
++}
++
++}  // namespace
++}  // namespace helium_noise
++}  // namespace blink
+Index: src/third_party/blink/renderer/core/helium_noise/text_policy.cc
+===================================================================
+--- /dev/null
++++ src/third_party/blink/renderer/core/helium_noise/text_policy.cc
+@@ -0,0 +1,29 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "third_party/blink/renderer/core/helium_noise/text_policy.h"
++
++#include "third_party/blink/renderer/core/helium_noise/helium_noise_hash.h"
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
++
++namespace blink {
++namespace helium_noise {
++
++TextAxisFactors ComputeTextAxisFactors(uint64_t profile_hash) {
++  auto factor = [profile_hash](uint64_t axis_tag) {
++    HeliumNoiseHash hash{HeliumNoiseToken(profile_hash)};
++    hash.Update(axis_tag);
++    const int delta = hash.GetValueBelow(3000001) - 1500000;
++    return 1.0 + static_cast<double>(delta) * 1e-12;
++  };
++  return {.x = factor(0x7800000000000001ULL),
++          .y = factor(0x7900000000000001ULL)};
++}
++
++}  // namespace helium_noise
++}  // namespace blink
+Index: src/third_party/blink/renderer/core/helium_noise/text_policy.h
+===================================================================
+--- /dev/null
++++ src/third_party/blink/renderer/core/helium_noise/text_policy.h
+@@ -0,0 +1,35 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_TEXT_POLICY_H_
++#define THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_TEXT_POLICY_H_
++
++#include <cstdint>
++
++#include "third_party/blink/renderer/core/core_export.h"
++
++namespace blink {
++namespace helium_noise {
++
++// Pair of multiplicative text-geometry factors derived from a profile hash.
++// |x| scales horizontal metrics (width, left, right); |y| scales vertical
++// metrics (ascent, descent, em heights, baselines). Both factors stay within
++// 1.0 +/- 1.5e-6 and equal 1.0 when text protection is inactive.
++struct TextAxisFactors {
++  double x;
++  double y;
++};
++
++// Derives the stable, axis-separated text factors from |profile_hash|.
++// Pure: same hash, same factors; distinct hashes never share factors.
++CORE_EXPORT TextAxisFactors ComputeTextAxisFactors(uint64_t profile_hash);
++
++}  // namespace helium_noise
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_TEXT_POLICY_H_
+Index: src/third_party/blink/renderer/core/helium_noise/build.gni
+===================================================================
+--- src.orig/third_party/blink/renderer/core/helium_noise/build.gni
++++ src/third_party/blink/renderer/core/helium_noise/build.gni
+@@ -11,10 +11,13 @@ blink_core_sources_helium_noise = [
+   "canvas_noising_helper.h",
+   "webgl_capability_policy.cc",
+   "webgl_capability_policy.h",
++  "text_policy.cc",
++  "text_policy.h",
+ ]
+ 
+ blink_core_tests_helium_noise = [
+   "helium_noise_profile_test.cc",
+   "canvas_noising_helper_test.cc",
+   "webgl_capability_policy_test.cc",
++  "text_policy_test.cc",
+ ]
+Index: src/third_party/blink/renderer/core/dom/document.h
+===================================================================
+--- src.orig/third_party/blink/renderer/core/dom/document.h
++++ src/third_party/blink/renderer/core/dom/document.h
+@@ -573,7 +573,6 @@ class CORE_EXPORT Document : public Cont
+     has_xml_declaration_ = has_xml_declaration ? 1 : 0;
+   }
+ 
+-  // Values for get*ClientRect fingerprint deception
+   double GetNoiseFactorX();
+   double GetNoiseFactorY();
+ 
+@@ -2900,9 +2899,6 @@ class CORE_EXPORT Document : public Cont
+ 
+   base::ElapsedTimer start_time_;
+ 
+-  double noise_factor_x_ = 1;
+-  double noise_factor_y_ = 1;
+-
+   // The script runner is used to run scripts of the following scheduling types:
+   // - ScriptSchedulingType::kAsync
+   // - ScriptSchedulingType::kInOrder
+Index: src/third_party/blink/renderer/core/dom/document.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/dom/document.cc
++++ src/third_party/blink/renderer/core/dom/document.cc
+@@ -212,6 +212,8 @@
+ #include "third_party/blink/renderer/core/fetch/fetch_later_util.h"
+ #include "third_party/blink/renderer/core/fragment_directive/fragment_directive.h"
+ #include "third_party/blink/renderer/core/fragment_directive/text_fragment_handler.h"
++#include "third_party/blink/renderer/core/helium_noise/helium_noise_profile.h"
++#include "third_party/blink/renderer/core/helium_noise/text_policy.h"
+ #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
+ #include "third_party/blink/renderer/core/frame/dom_visual_viewport.h"
+ #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
+@@ -1050,11 +1052,6 @@ Document::Document(const DocumentInit& i
+       data_(MakeGarbageCollected<DocumentData>(GetExecutionContext())) {
+   TRACE_EVENT("blink", "Document::Document", perfetto::Flow::FromPointer(this));
+   DCHECK(agent_);
+-  if (RuntimeEnabledFeatures::FingerprintingClientRectsNoiseEnabled()) {
+-    // Precompute -0.0003% to 0.0003% noise factor for get*ClientRect*() fingerprinting
+-    noise_factor_x_ = 1 + (base::RandDouble() - 0.5) * 0.000003;
+-    noise_factor_y_ = 1 + (base::RandDouble() - 0.5) * 0.000003;
+-  }
+   if (base::FeatureList::IsEnabled(features::kDelayAsyncScriptExecution) &&
+       features::kDelayAsyncScriptExecutionDelayByDefaultParam.Get()) {
+     script_runner_delayer_->Activate();
+@@ -1185,11 +1182,33 @@ const Position Document::PositionAdjuste
+ }
+ 
+ double Document::GetNoiseFactorX() {
+-  return noise_factor_x_;
++  if (!base::FeatureList::IsEnabled(features::kHeliumNoise) ||
++      !base::FeatureList::IsEnabled(features::kHeliumNoiseTextGeometry)) {
++    return 1.0;
++  }
++  const auto* profile =
++      helium_noise::HeliumNoiseProfile::From(GetExecutionContext());
++  if (!profile) {
++    return 1.0;
++  }
++  return helium_noise::ComputeTextAxisFactors(
++             profile->Hash(helium_noise::ProfileDomain::kText))
++      .x;
+ }
+ 
+ double Document::GetNoiseFactorY() {
+-  return noise_factor_y_;
++  if (!base::FeatureList::IsEnabled(features::kHeliumNoise) ||
++      !base::FeatureList::IsEnabled(features::kHeliumNoiseTextGeometry)) {
++    return 1.0;
++  }
++  const auto* profile =
++      helium_noise::HeliumNoiseProfile::From(GetExecutionContext());
++  if (!profile) {
++    return 1.0;
++  }
++  return helium_noise::ComputeTextAxisFactors(
++             profile->Hash(helium_noise::ProfileDomain::kText))
++      .y;
+ }
+ 
+ SelectorQueryCache& Document::GetSelectorQueryCache() {
+Index: src/third_party/blink/renderer/core/dom/element.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/dom/element.cc
++++ src/third_party/blink/renderer/core/dom/element.cc
+@@ -3480,9 +3480,7 @@ Vector<gfx::RectF> Element::GetClientRec
+   }
+   Vector<gfx::RectF> result;
+   for (auto& quad : quads) {
+-    if (RuntimeEnabledFeatures::FingerprintingClientRectsNoiseEnabled()) {
+-      quad.Scale(GetDocument().GetNoiseFactorX(), GetDocument().GetNoiseFactorY());
+-    }
++    quad.Scale(GetDocument().GetNoiseFactorX(), GetDocument().GetNoiseFactorY());
+     result.emplace_back(quad.BoundingBox());
+   }
+   return result;
+@@ -3512,9 +3510,7 @@ gfx::RectF Element::GetBoundingClientRec
+   DCHECK(element_layout_object);
+   GetDocument().AdjustRectForScrollAndAbsoluteZoom(result,
+                                                    *element_layout_object);
+-  if (RuntimeEnabledFeatures::FingerprintingClientRectsNoiseEnabled()) {
+-    result.Scale(GetDocument().GetNoiseFactorX(), GetDocument().GetNoiseFactorY());
+-  }
++  result.Scale(GetDocument().GetNoiseFactorX(), GetDocument().GetNoiseFactorY());
+   return result;
+ }
+ 
+Index: src/third_party/blink/renderer/core/dom/range.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/dom/range.cc
++++ src/third_party/blink/renderer/core/dom/range.cc
+@@ -1664,10 +1664,8 @@ DOMRectList* Range::getClientRects() con
+   Vector<gfx::QuadF> quads;
+   GetBorderAndTextQuads(quads);
+ 
+-  if (RuntimeEnabledFeatures::FingerprintingClientRectsNoiseEnabled()) {
+-    for (gfx::QuadF& quad : quads) {
+-      quad.Scale(owner_document_->GetNoiseFactorX(), owner_document_->GetNoiseFactorY());
+-    }
++  for (gfx::QuadF& quad : quads) {
++    quad.Scale(owner_document_->GetNoiseFactorX(), owner_document_->GetNoiseFactorY());
+   }
+ 
+   return MakeGarbageCollected<DOMRectList>(quads);
+@@ -1678,9 +1676,7 @@ DOMRect* Range::getBoundingClientRect()
+   // impact is understood.
+   SyncScrollAttemptHeuristic::DidAccessScrollOffset();
+   auto rect = BoundingRect();
+-  if (RuntimeEnabledFeatures::FingerprintingClientRectsNoiseEnabled()) {
+-    rect.Scale(owner_document_->GetNoiseFactorX(), owner_document_->GetNoiseFactorY());
+-  }
++  rect.Scale(owner_document_->GetNoiseFactorX(), owner_document_->GetNoiseFactorY());
+   return DOMRect::FromRectF(rect);
+ }
+ 
+Index: src/third_party/blink/renderer/core/html/canvas/text_metrics.h
+===================================================================
+--- src.orig/third_party/blink/renderer/core/html/canvas/text_metrics.h
++++ src/third_party/blink/renderer/core/html/canvas/text_metrics.h
+@@ -112,6 +112,21 @@ class CORE_EXPORT TextMetrics final : pu
+ 
+   void Shuffle(const double factor);
+ 
++  // Scales horizontal metrics by |factor_x| and vertical metrics (ascents,
++  // descents, em heights, baselines) by |factor_y|. Called once per
++  // measureText() when text-geometry protection is active.
++  void Shuffle(double factor_x, double factor_y);
++
++  // Seeds the metric fields directly for the Shuffle() unit test; the
++  // default-constructed members are all zero, so a helper cannot produce
++  // seed values by scaling.
++  friend TextMetrics* MakeMetricsForTesting(double,
++                                            double,
++                                            double,
++                                            double,
++                                            double,
++                                            double);
++
+  private:
+   void Update(const Font*,
+               const TextDirection& direction,
+Index: src/third_party/blink/renderer/core/html/canvas/text_metrics.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/html/canvas/text_metrics.cc
++++ src/third_party/blink/renderer/core/html/canvas/text_metrics.cc
+@@ -110,6 +110,21 @@ void TextMetrics::Shuffle(const double f
+   baselines_->setIdeographic(baselines_->ideographic() * factor);
+ }
+ 
++void TextMetrics::Shuffle(double factor_x, double factor_y) {
++  width_ *= factor_x;
++  actual_bounding_box_left_ *= factor_x;
++  actual_bounding_box_right_ *= factor_x;
++  font_bounding_box_ascent_ *= factor_y;
++  font_bounding_box_descent_ *= factor_y;
++  actual_bounding_box_ascent_ *= factor_y;
++  actual_bounding_box_descent_ *= factor_y;
++  em_height_ascent_ *= factor_y;
++  em_height_descent_ *= factor_y;
++  baselines_->setAlphabetic(baselines_->alphabetic() * factor_y);
++  baselines_->setHanging(baselines_->hanging() * factor_y);
++  baselines_->setIdeographic(baselines_->ideographic() * factor_y);
++}
++
+ void TextMetrics::Update(const Font* font,
+                          const TextDirection& direction,
+                          const V8CanvasTextBaseline::Enum baseline,
+Index: src/third_party/blink/renderer/core/html/canvas/text_metrics_test.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/html/canvas/text_metrics_test.cc
++++ src/third_party/blink/renderer/core/html/canvas/text_metrics_test.cc
+@@ -28,6 +28,27 @@ class FontsHolder : public GarbageCollec
+ };
+ }  // namespace
+ 
++// Builds a TextMetrics pre-seeded with explicit metric values so Shuffle()
++// can be verified as a pure value mapping, without shaping real text.
++// Declared as a friend of TextMetrics (see text_metrics.h): the
++// default-constructed members are all zero, so seeding has to assign the
++// values directly.
++inline TextMetrics* MakeMetricsForTesting(double width,
++                                          double left,
++                                          double right,
++                                          double ascent,
++                                          double descent,
++                                          double alphabetic_baseline) {
++  TextMetrics* metrics = MakeGarbageCollected<TextMetrics>();
++  metrics->width_ = width;
++  metrics->actual_bounding_box_left_ = left;
++  metrics->actual_bounding_box_right_ = right;
++  metrics->actual_bounding_box_ascent_ = ascent;
++  metrics->actual_bounding_box_descent_ = descent;
++  metrics->baselines_->setAlphabetic(alphabetic_baseline);
++  return metrics;
++}
++
+ class TextMetricsTest : public testing::Test {
+  public:
+   enum FontType {
+@@ -241,4 +262,17 @@ TEST_P(CaretPositionForOffsetBidiTest, C
+   }
+ }
+ 
++TEST(TextMetricsTest, ShuffleMapsHorizontalAndVerticalFactors) {
++  TextMetrics* metrics = MakeMetricsForTesting(
++      /*width=*/10, /*left=*/2, /*right=*/3,
++      /*ascent=*/4, /*descent=*/5, /*alphabetic_baseline=*/6);
++  metrics->Shuffle(2.0, 3.0);
++  EXPECT_EQ(20, metrics->width());
++  EXPECT_EQ(4, metrics->actualBoundingBoxLeft());
++  EXPECT_EQ(6, metrics->actualBoundingBoxRight());
++  EXPECT_EQ(12, metrics->actualBoundingBoxAscent());
++  EXPECT_EQ(15, metrics->actualBoundingBoxDescent());
++  EXPECT_EQ(18, metrics->alphabeticBaseline());
++}
++
+ }  // namespace blink
+Index: src/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
++++ src/third_party/blink/renderer/modules/canvas/canvas2d/base_rendering_context_2d.cc
+@@ -14,6 +14,7 @@
+ 
+ #include "base/check.h"
+ #include "base/check_op.h"
++#include "base/feature_list.h"
+ #include "base/location.h"
+ #include "base/memory/scoped_refptr.h"
+ #include "base/memory/weak_ptr.h"
+@@ -30,6 +31,7 @@
+ #include "components/viz/common/resources/shared_image_format_utils.h"
+ #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
+ #include "third_party/blink/public/common/metrics/document_update_reason.h"
++#include "third_party/blink/public/common/features.h"
+ #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink-forward.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_canvas_text_align.h"
+ #include "third_party/blink/renderer/bindings/core/v8/v8_canvas_text_baseline.h"
+@@ -47,6 +49,8 @@
+ #include "third_party/blink/renderer/core/frame/web_feature.h"
+ #include "third_party/blink/renderer/core/geometry/dom_matrix.h"
+ #include "third_party/blink/renderer/core/helium_noise/canvas_noising_helper.h"
++#include "third_party/blink/renderer/core/helium_noise/helium_noise_profile.h"
++#include "third_party/blink/renderer/core/helium_noise/text_policy.h"
+ #include "third_party/blink/renderer/core/html/canvas/canvas_font_cache.h"
+ #include "third_party/blink/renderer/core/html/canvas/canvas_performance_monitor.h"
+ #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
+@@ -1160,15 +1164,19 @@ TextMetrics* BaseRenderingContext2D::mea
+       font, direction, state.GetTextBaseline(), state.GetTextAlign(), text,
+       host->GetPlainTextPainter());
+ 
+-  // Scale text metrics if enabled
+-  if (RuntimeEnabledFeatures::FingerprintingCanvasMeasureTextNoiseEnabled()) {
+-    if (HostAsOffscreenCanvas()) {
+-      if (auto* window = DynamicTo<LocalDOMWindow>(GetTopExecutionContext())) {
+-        if (window->GetFrame() && window->GetFrame()->GetDocument())
+-          text_metrics->Shuffle(window->GetFrame()->GetDocument()->GetNoiseFactorX());
+-      }
+-    } else if (canvas) {
+-      text_metrics->Shuffle(canvas->GetDocument().GetNoiseFactorX());
++  // Scale text metrics if enabled: master -> kHeliumNoiseTextGeometry ->
++  // profile, hashed on the kText domain. The profile comes from this
++  // context's own execution context, so worker OffscreenCanvas contexts
++  // inherit their worker's token map. Missing profile fails open (no
++  // shuffle).
++  if (base::FeatureList::IsEnabled(blink::features::kHeliumNoise) &&
++      base::FeatureList::IsEnabled(
++          blink::features::kHeliumNoiseTextGeometry)) {
++    if (auto* profile =
++            helium_noise::HeliumNoiseProfile::From(GetExecutionContext())) {
++      const auto factors = helium_noise::ComputeTextAxisFactors(
++          profile->Hash(helium_noise::ProfileDomain::kText));
++      text_metrics->Shuffle(factors.x, factors.y);
+     }
+   }
+   return text_metrics;

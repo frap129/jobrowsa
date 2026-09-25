@@ -1,0 +1,948 @@
+Index: src/third_party/blink/renderer/core/BUILD.gn
+===================================================================
+--- src.orig/third_party/blink/renderer/core/BUILD.gn
++++ src/third_party/blink/renderer/core/BUILD.gn
+@@ -1520,6 +1520,7 @@ source_set("unit_tests") {
+   sources += rebase_path(blink_core_tests_ad_tracker, "", "ad_tracker")
+   sources += rebase_path(blink_core_tests_fullscreen, "", "fullscreen")
+   sources += rebase_path(blink_core_tests_geometry, "", "geometry")
++  sources += rebase_path(blink_core_tests_helium_noise, "", "helium_noise")
+   sources += rebase_path(blink_core_tests_highlight, "", "highlight")
+   sources += rebase_path(blink_core_tests_html, "", "html")
+   sources +=
+Index: src/third_party/blink/renderer/core/helium_noise/build.gni
+===================================================================
+--- src.orig/third_party/blink/renderer/core/helium_noise/build.gni
++++ src/third_party/blink/renderer/core/helium_noise/build.gni
+@@ -5,6 +5,12 @@
+ blink_core_sources_helium_noise = [
+   "helium_noise_hash.cc",
+   "helium_noise_hash.h",
++  "helium_noise_profile.cc",
++  "helium_noise_profile.h",
+   "canvas_noising_helper.cc",
+   "canvas_noising_helper.h",
+ ]
++
++blink_core_tests_helium_noise = [
++  "helium_noise_profile_test.cc",
++]
+Index: src/third_party/blink/renderer/core/helium_noise/helium_noise_profile_test.cc
+===================================================================
+--- /dev/null
++++ src/third_party/blink/renderer/core/helium_noise/helium_noise_profile_test.cc
+@@ -0,0 +1,135 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "third_party/blink/renderer/core/helium_noise/helium_noise_profile.h"
++
++#include <array>
++#include <bit>
++#include <cstdint>
++#include <ios>
++
++#include "base/containers/flat_set.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
++#include "third_party/blink/renderer/core/dom/document.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/core/testing/page_test_base.h"
++#include "ui/gfx/geometry/size.h"
++
++namespace blink {
++namespace {
++
++class HeliumNoiseProfileTest : public PageTestBase {
++ public:
++  void SetUp() override { PageTestBase::SetUp(gfx::Size()); }
++
++  ExecutionContext* Context() const {
++    ExecutionContext* context = GetDocument().GetExecutionContext();
++    EXPECT_TRUE(context);
++    return context;
++  }
++};
++
++TEST_F(HeliumNoiseProfileTest, MissingHighEntropyTokenFailsOpen) {
++  GetPage().SetHeliumNoiseTokens(
++      {{HeliumNoiseFeature::kCanvas, HeliumNoiseToken(7)}});
++
++  EXPECT_EQ(helium_noise::HeliumNoiseProfile::From(Context()), nullptr);
++}
++
++TEST_F(HeliumNoiseProfileTest, DomainsAreStableAndSeparated) {
++  GetPage().SetHeliumNoiseTokens(
++      {{HeliumNoiseFeature::kHighEntropy, HeliumNoiseToken(7)}});
++
++  helium_noise::HeliumNoiseProfile* profile =
++      helium_noise::HeliumNoiseProfile::From(Context());
++  ASSERT_NE(profile, nullptr);
++
++  EXPECT_EQ(profile->Hash(helium_noise::ProfileDomain::kText),
++            profile->Hash(helium_noise::ProfileDomain::kText));
++
++  base::flat_set<uint64_t> hashes = {
++      profile->Hash(helium_noise::ProfileDomain::kRendering),
++      profile->Hash(helium_noise::ProfileDomain::kWebGLCapability),
++      profile->Hash(helium_noise::ProfileDomain::kText),
++      profile->Hash(helium_noise::ProfileDomain::kFont),
++      profile->Hash(helium_noise::ProfileDomain::kDisplay),
++  };
++  EXPECT_EQ(hashes.size(), 5u);
++
++  // The domain constants must be pairwise distinct mod 8 (odd-flavored
++  // trailing bits), so that low-truncated hashes never share more than the
++  // lowest 2 bits between domains.
++  constexpr std::array<uint64_t, 5> kDomainValues = {
++      static_cast<uint64_t>(helium_noise::ProfileDomain::kRendering),
++      static_cast<uint64_t>(helium_noise::ProfileDomain::kWebGLCapability),
++      static_cast<uint64_t>(helium_noise::ProfileDomain::kText),
++      static_cast<uint64_t>(helium_noise::ProfileDomain::kFont),
++      static_cast<uint64_t>(helium_noise::ProfileDomain::kDisplay),
++  };
++  for (size_t i = 0; i < kDomainValues.size(); ++i) {
++    for (size_t j = i + 1; j < kDomainValues.size(); ++j) {
++      const uint64_t xor_value = kDomainValues[i] ^ kDomainValues[j];
++      EXPECT_LE(std::countr_zero(xor_value), 2)
++          << "domains " << i << " and " << j
++          << " share more than the lowest 2 bits";
++    }
++  }
++}
++
++TEST_F(HeliumNoiseProfileTest, DomainHashesDifferInLowBits) {
++  GetPage().SetHeliumNoiseTokens(
++      {{HeliumNoiseFeature::kHighEntropy, HeliumNoiseToken(7)}});
++
++  helium_noise::HeliumNoiseProfile* profile =
++      helium_noise::HeliumNoiseProfile::From(Context());
++  ASSERT_NE(profile, nullptr);
++
++  constexpr std::array<uint64_t, 4> kTokens = {0x11, 0x22, 0x3333, 0x44445555};
++  constexpr std::array<helium_noise::ProfileDomain, 5> kDomains = {
++      helium_noise::ProfileDomain::kRendering,
++      helium_noise::ProfileDomain::kWebGLCapability,
++      helium_noise::ProfileDomain::kText,
++      helium_noise::ProfileDomain::kFont,
++      helium_noise::ProfileDomain::kDisplay,
++  };
++  for (uint64_t token : kTokens) {
++    GetPage().SetHeliumNoiseTokens(
++        {{HeliumNoiseFeature::kHighEntropy, HeliumNoiseToken(token)}});
++    profile = helium_noise::HeliumNoiseProfile::From(Context());
++    ASSERT_NE(profile, nullptr);
++    for (size_t i = 0; i < kDomains.size(); ++i) {
++      for (size_t j = i + 1; j < kDomains.size(); ++j) {
++        const uint64_t hash_i = profile->Hash(kDomains[i]);
++        const uint64_t hash_j = profile->Hash(kDomains[j]);
++        EXPECT_NE((hash_i ^ hash_j) & 0xFFFF, 0u)
++            << "token 0x" << std::hex << token << ": domains " << i << " and "
++            << j << " share identical low 16 bits";
++      }
++    }
++  }
++}
++
++TEST_F(HeliumNoiseProfileTest, TokenChangeInvalidatesCachedProfile) {
++  GetPage().SetHeliumNoiseTokens(
++      {{HeliumNoiseFeature::kHighEntropy, HeliumNoiseToken(7)}});
++  const uint64_t text_hash_7 =
++      helium_noise::HeliumNoiseProfile::From(Context())
++          ->Hash(helium_noise::ProfileDomain::kText);
++
++  GetPage().SetHeliumNoiseTokens(
++      {{HeliumNoiseFeature::kHighEntropy, HeliumNoiseToken(9)}});
++  const uint64_t text_hash_9 =
++      helium_noise::HeliumNoiseProfile::From(Context())
++          ->Hash(helium_noise::ProfileDomain::kText);
++
++  EXPECT_NE(text_hash_7, text_hash_9);
++}
++
++}  // namespace
++}  // namespace blink
+Index: src/third_party/blink/renderer/core/workers/dedicated_worker_test.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/workers/dedicated_worker_test.cc
++++ src/third_party/blink/renderer/core/workers/dedicated_worker_test.cc
+@@ -14,6 +14,7 @@
+ #include "base/test/bind.h"
+ #include "testing/gmock/include/gmock/gmock.h"
+ #include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
+ #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
+ #include "third_party/blink/public/mojom/v8_cache_options.mojom-blink.h"
+ #include "third_party/blink/public/mojom/worker/dedicated_worker_host.mojom-blink.h"
+@@ -32,6 +33,7 @@
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/local_frame.h"
++#include "third_party/blink/renderer/core/helium_noise/helium_noise_profile.h"
+ #include "third_party/blink/renderer/core/inspector/thread_debugger_common_impl.h"
+ #include "third_party/blink/renderer/core/loader/empty_clients.h"
+ #include "third_party/blink/renderer/core/loader/worker_fetch_context.h"
+@@ -305,6 +307,7 @@
+                   ->GetFrame()
+                   ->GetSettings()));
+     }
++    params->noise_tokens = GetExecutionContext()->GetHeliumNoiseTokens();
+     InitializeWorkerThread(
+         std::move(params),
+         WorkerBackingThreadStartupData(
+@@ -1129,4 +1132,32 @@
+   EXPECT_EQ(has_document_policy, IsFeatureEnabled());
+ }
+ 
++TEST_F(DedicatedWorkerTest, InheritsCreatorHeliumNoiseTokens) {
++  GetDocument().GetExecutionContext()->SetHeliumNoiseTokens(
++      {{HeliumNoiseFeature::kHighEntropy, HeliumNoiseToken(11)}});
++
++  StartWorker();
++  WaitUntilWorkerIsRunning();
++
++  RunOnWorkerThread(CrossThreadBindOnce(
++      [](ExecutionContext* worker_context) {
++        const HeliumNoiseTokenMap& tokens =
++            worker_context->GetHeliumNoiseTokens();
++        ASSERT_TRUE(tokens.contains(HeliumNoiseFeature::kHighEntropy));
++        EXPECT_EQ(tokens.at(HeliumNoiseFeature::kHighEntropy).Value(), 11u);
++      }));
++}
++
++TEST_F(DedicatedWorkerTest, EmptyCreatorMapFailsOpen) {
++  StartWorker();
++  WaitUntilWorkerIsRunning();
++
++  RunOnWorkerThread(CrossThreadBindOnce(
++      [](ExecutionContext* worker_context) {
++        EXPECT_TRUE(worker_context->GetHeliumNoiseTokens().empty());
++        EXPECT_EQ(helium_noise::HeliumNoiseProfile::From(worker_context),
++                  nullptr);
++      }));
++}
++
+ }  // namespace blink
+Index: src/content/browser/helium_noise/noise_token_data.cc
+===================================================================
+--- src.orig/content/browser/helium_noise/noise_token_data.cc
++++ src/content/browser/helium_noise/noise_token_data.cc
+@@ -61,6 +61,8 @@ HeliumNoiseTokenData::HeliumNoiseTokenDa
+       blink::HeliumNoiseToken(base::RandUint64());
+   session_tokens_[blink::HeliumNoiseFeature::kHardware] =
+       blink::HeliumNoiseToken(base::RandUint64());
++  session_tokens_[blink::HeliumNoiseFeature::kHighEntropy] =
++      blink::HeliumNoiseToken(base::RandUint64());
+ }
+ 
+ // static
+Index: src/third_party/blink/common/features.cc
+===================================================================
+--- src.orig/third_party/blink/common/features.cc
++++ src/third_party/blink/common/features.cc
+@@ -63,6 +63,18 @@ BASE_FEATURE(kHeliumNoiseAudio,
+ // navigator.hardwareConcurrency noising for fingerprint protection.
+ BASE_FEATURE(kHeliumNoiseCpuCores, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
++// Coordinated WebGL protection for fingerprinting protection.
++BASE_FEATURE(kHeliumNoiseWebGL, base::FEATURE_ENABLED_BY_DEFAULT);
++
++// Coordinated text geometry protection for fingerprinting protection.
++BASE_FEATURE(kHeliumNoiseTextGeometry, base::FEATURE_ENABLED_BY_DEFAULT);
++
++// Coordinated font exposure protection for fingerprinting protection.
++BASE_FEATURE(kHeliumNoiseFonts, base::FEATURE_ENABLED_BY_DEFAULT);
++
++// Coordinated display geometry protection for fingerprinting protection.
++BASE_FEATURE(kHeliumNoiseDisplay, base::FEATURE_ENABLED_BY_DEFAULT);
++
+ // Controls whether to include information about the page's open popup in
+ // AIPageContent.
+ BASE_FEATURE(kAIPageContentIncludePopupWindows,
+Index: src/third_party/blink/public/common/features.h
+===================================================================
+--- src.orig/third_party/blink/public/common/features.h
++++ src/third_party/blink/public/common/features.h
+@@ -46,6 +46,10 @@ BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE
+ BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHeliumNoiseCanvas);
+ BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHeliumNoiseAudio);
+ BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHeliumNoiseCpuCores);
++BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHeliumNoiseWebGL);
++BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHeliumNoiseTextGeometry);
++BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHeliumNoiseFonts);
++BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHeliumNoiseDisplay);
+ 
+ // Controls whether to include information about the page's open popup in
+ // AIPageContent.
+Index: src/third_party/blink/public/common/helium_noise/noise_token.h
+===================================================================
+--- src.orig/third_party/blink/public/common/helium_noise/noise_token.h
++++ src/third_party/blink/public/common/helium_noise/noise_token.h
+@@ -24,6 +24,7 @@ enum class HeliumNoiseFeature {
+   kCanvas,
+   kAudio,
+   kHardware,
++  kHighEntropy,
+ };
+ 
+ // A wrapper class for a uint64_t noise token.
+Index: src/third_party/blink/public/common/helium_noise/noise_token_mojom_traits.h
+===================================================================
+--- src.orig/third_party/blink/public/common/helium_noise/noise_token_mojom_traits.h
++++ src/third_party/blink/public/common/helium_noise/noise_token_mojom_traits.h
+@@ -32,6 +32,8 @@ struct BLINK_COMMON_EXPORT
+         return blink::mojom::HeliumNoiseFeature::kAudio;
+       case blink::HeliumNoiseFeature::kHardware:
+         return blink::mojom::HeliumNoiseFeature::kHardware;
++      case blink::HeliumNoiseFeature::kHighEntropy:
++        return blink::mojom::HeliumNoiseFeature::kHighEntropy;
+     }
+     NOTREACHED();
+   }
+@@ -45,6 +47,8 @@ struct BLINK_COMMON_EXPORT
+         return blink::HeliumNoiseFeature::kAudio;
+       case blink::mojom::HeliumNoiseFeature::kHardware:
+         return blink::HeliumNoiseFeature::kHardware;
++      case blink::mojom::HeliumNoiseFeature::kHighEntropy:
++        return blink::HeliumNoiseFeature::kHighEntropy;
+     }
+ 
+     NOTREACHED();
+Index: src/third_party/blink/public/mojom/helium_noise/noise_token.mojom
+===================================================================
+--- src.orig/third_party/blink/public/mojom/helium_noise/noise_token.mojom
++++ src/third_party/blink/public/mojom/helium_noise/noise_token.mojom
+@@ -9,6 +9,7 @@ enum HeliumNoiseFeature {
+   kCanvas,
+   kAudio,
+   kHardware,
++  kHighEntropy,
+ };
+ 
+ // Typemapped to blink::HeliumNoiseToken
+Index: src/third_party/blink/renderer/core/execution_context/execution_context.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/execution_context/execution_context.cc
++++ src/third_party/blink/renderer/core/execution_context/execution_context.cc
+@@ -49,6 +49,7 @@
+ #include "third_party/blink/renderer/core/frame/integrity_policy.h"
+ #include "third_party/blink/renderer/core/frame/local_dom_window.h"
+ #include "third_party/blink/renderer/core/frame/web_feature.h"
++#include "third_party/blink/renderer/core/helium_noise/helium_noise_profile.h"
+ #include "third_party/blink/renderer/core/inspector/console_message.h"
+ #include "third_party/blink/renderer/core/inspector/inspector_audits_issue.h"
+ #include "third_party/blink/renderer/core/loader/document_loader.h"
+@@ -553,6 +554,7 @@ void ExecutionContext::Trace(Visitor* vi
+   visitor->Trace(origin_trial_context_);
+   visitor->Trace(content_security_policy_);
+   visitor->Trace(runtime_feature_state_override_context_);
++  visitor->Trace(helium_noise_profile_);
+   MojoBindingContext::Trace(visitor);
+   ConsoleLogger::Trace(visitor);
+   Supplementable<ExecutionContext>::Trace(visitor);
+Index: src/third_party/blink/renderer/core/execution_context/execution_context.h
+===================================================================
+--- src.orig/third_party/blink/renderer/core/execution_context/execution_context.h
++++ src/third_party/blink/renderer/core/execution_context/execution_context.h
+@@ -99,6 +99,10 @@ class ScriptState;
+ class ScriptWrappable;
+ class TrustedTypePolicyFactory;
+ 
++namespace helium_noise {
++class HeliumNoiseProfile;
++}  // namespace helium_noise
++
+ enum ReasonForCallingCanExecuteScripts {
+   kAboutToExecuteScript,
+   kNotAboutToExecuteScript
+@@ -475,7 +479,7 @@ class CORE_EXPORT ExecutionContext : pub
+     return net::StorageAccessApiStatus::kNone;
+   }
+ 
+-  const HeliumNoiseTokenMap& GetHeliumNoiseTokens() const {
++  virtual const HeliumNoiseTokenMap& GetHeliumNoiseTokens() const {
+     return noise_tokens_;
+   }
+ 
+@@ -488,10 +492,23 @@ class CORE_EXPORT ExecutionContext : pub
+     return noise_tokens_.at(feature);
+   }
+ 
+-  void SetHeliumNoiseTokens(const HeliumNoiseTokenMap& tokens) {
++  virtual void SetHeliumNoiseTokens(const HeliumNoiseTokenMap& tokens) {
++    if (noise_tokens_ == tokens) {
++      return;
++    }
++    helium_noise_profile_ = nullptr;
+     noise_tokens_ = tokens;
+   }
+ 
++  virtual helium_noise::HeliumNoiseProfile* GetHeliumNoiseProfile() const {
++    return helium_noise_profile_;
++  }
++
++  virtual void SetHeliumNoiseProfile(
++      helium_noise::HeliumNoiseProfile* profile) {
++    helium_noise_profile_ = profile;
++  }
++
+   const std::optional<NoiseToken>& CanvasNoiseToken() const {
+     return canvas_noise_token_;
+   }
+@@ -582,6 +599,10 @@ class CORE_EXPORT ExecutionContext : pub
+ 
+   HeliumNoiseTokenMap noise_tokens_;
+ 
++  // Lazily-created profile derived from the high-entropy noise token. Cleared
++  // whenever the token map changes.
++  Member<helium_noise::HeliumNoiseProfile> helium_noise_profile_;
++
+   std::optional<NoiseToken> canvas_noise_token_;
+ };
+ 
+Index: src/third_party/blink/renderer/core/frame/local_dom_window.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/frame/local_dom_window.cc
++++ src/third_party/blink/renderer/core/frame/local_dom_window.cc
+@@ -2825,6 +2825,38 @@ net::StorageAccessApiStatus LocalDOMWind
+   return storage_access_api_status_;
+ }
+ 
++const HeliumNoiseTokenMap& LocalDOMWindow::GetHeliumNoiseTokens() const {
++  // Detached windows have no owning Page; fall back to the (empty) base map
++  // instead of dereferencing a null frame or page. Fails open.
++  if (!GetFrame() || !GetFrame()->GetPage()) {
++    return ExecutionContext::GetHeliumNoiseTokens();
++  }
++  return GetFrame()->GetPage()->GetHeliumNoiseTokens();
++}
++
++void LocalDOMWindow::SetHeliumNoiseTokens(const HeliumNoiseTokenMap& tokens) {
++  if (!GetFrame() || !GetFrame()->GetPage()) {
++    return;
++  }
++  GetFrame()->GetPage()->SetHeliumNoiseTokens(tokens);
++}
++
++helium_noise::HeliumNoiseProfile* LocalDOMWindow::GetHeliumNoiseProfile()
++    const {
++  if (!GetFrame() || !GetFrame()->GetPage()) {
++    return nullptr;
++  }
++  return GetFrame()->GetPage()->GetHeliumNoiseProfile();
++}
++
++void LocalDOMWindow::SetHeliumNoiseProfile(
++    helium_noise::HeliumNoiseProfile* profile) {
++  if (!GetFrame() || !GetFrame()->GetPage()) {
++    return;
++  }
++  GetFrame()->GetPage()->SetHeliumNoiseProfile(profile);
++}
++
+ std::optional<mojom::blink::PolicyDisposition>
+ LocalDOMWindow::GetGuardrailsPolicyState() const {
+   // Probe the policy lists to set disposition accordingly. IsFeatureEnabled
+Index: src/third_party/blink/renderer/core/frame/local_dom_window.h
+===================================================================
+--- src.orig/third_party/blink/renderer/core/frame/local_dom_window.h
++++ src/third_party/blink/renderer/core/frame/local_dom_window.h
+@@ -64,6 +64,10 @@
+ 
+ namespace blink {
+ 
++namespace helium_noise {
++class HeliumNoiseProfile;
++}  // namespace helium_noise
++
+ class BarProp;
+ class CSSStyleDeclaration;
+ class CustomElementRegistry;
+@@ -224,6 +228,10 @@ class CORE_EXPORT LocalDOMWindow final :
+       const String& source_file = g_empty_string) const final;
+   void SetIsInBackForwardCache(bool) final;
+   net::StorageAccessApiStatus GetStorageAccessApiStatus() const final;
++  const HeliumNoiseTokenMap& GetHeliumNoiseTokens() const final;
++  void SetHeliumNoiseTokens(const HeliumNoiseTokenMap& tokens) final;
++  helium_noise::HeliumNoiseProfile* GetHeliumNoiseProfile() const final;
++  void SetHeliumNoiseProfile(helium_noise::HeliumNoiseProfile* profile) final;
+   std::optional<mojom::blink::PolicyDisposition> GetGuardrailsPolicyState()
+       const final;
+   bool CheckGuardrailsPolicyForAssetSize(GuardrailPolicyAssetType asset_type,
+Index: src/third_party/blink/renderer/core/helium_noise/helium_noise_hash.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/helium_noise/helium_noise_hash.cc
++++ src/third_party/blink/renderer/core/helium_noise/helium_noise_hash.cc
+@@ -44,4 +44,10 @@ int HeliumNoiseHash::GetValueBelow(const
+   return value;
+ }
+ 
++uint64_t HeliumNoiseHash::GetValue() {
++  uint64_t value = token_hash_;
++  remaining_bits_ = 0;
++  return value;
++}
++
+ }  // namespace blink
+Index: src/third_party/blink/renderer/core/helium_noise/helium_noise_hash.h
+===================================================================
+--- src.orig/third_party/blink/renderer/core/helium_noise/helium_noise_hash.h
++++ src/third_party/blink/renderer/core/helium_noise/helium_noise_hash.h
+@@ -33,6 +33,10 @@ class CORE_EXPORT HeliumNoiseHash {
+   // the available bits, use Update().
+   int GetValueBelow(const int max_value);
+ 
++  // Returns the full 64-bit pseudo-random value of the current token hash.
++  // This consumes all remaining bits of the hash; call Update() to reset.
++  uint64_t GetValue();
++
+  private:
+   uint64_t token_hash_ = 0;
+   int remaining_bits_ = 0;
+Index: src/third_party/blink/renderer/core/helium_noise/helium_noise_profile.cc
+===================================================================
+--- /dev/null
++++ src/third_party/blink/renderer/core/helium_noise/helium_noise_profile.cc
+@@ -0,0 +1,47 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "third_party/blink/renderer/core/helium_noise/helium_noise_profile.h"
++
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/core/helium_noise/helium_noise_hash.h"
++#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
++
++namespace blink {
++namespace helium_noise {
++
++// static
++HeliumNoiseProfile* HeliumNoiseProfile::From(ExecutionContext* context) {
++  if (!context) {
++    return nullptr;
++  }
++  const HeliumNoiseTokenMap& tokens = context->GetHeliumNoiseTokens();
++  if (!tokens.contains(HeliumNoiseFeature::kHighEntropy)) {
++    return nullptr;
++  }
++  if (HeliumNoiseProfile* profile = context->GetHeliumNoiseProfile()) {
++    return profile;
++  }
++  HeliumNoiseProfile* profile = MakeGarbageCollected<HeliumNoiseProfile>(
++      tokens.at(HeliumNoiseFeature::kHighEntropy));
++  context->SetHeliumNoiseProfile(profile);
++  return profile;
++}
++
++uint64_t HeliumNoiseProfile::Hash(ProfileDomain domain) const {
++  HeliumNoiseHash hash(token_);
++  hash.Update(static_cast<uint64_t>(domain));
++  return hash.GetValue();
++}
++
++HeliumNoiseProfile::HeliumNoiseProfile(HeliumNoiseToken token)
++    : token_(token) {}
++
++}  // namespace helium_noise
++}  // namespace blink
+Index: src/third_party/blink/renderer/core/helium_noise/helium_noise_profile.h
+===================================================================
+--- /dev/null
++++ src/third_party/blink/renderer/core/helium_noise/helium_noise_profile.h
+@@ -0,0 +1,66 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#ifndef THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_HELIUM_NOISE_PROFILE_H_
++#define THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_HELIUM_NOISE_PROFILE_H_
++
++#include <cstdint>
++
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
++#include "third_party/blink/renderer/core/core_export.h"
++#include "third_party/blink/renderer/platform/heap/garbage_collected.h"
++
++namespace blink {
++
++class ExecutionContext;
++
++namespace helium_noise {
++
++// Fingerprinting-protection domains that derive independent pseudo-random
++// values from the context's high-entropy noise token. Each domain must yield
++// a stable value for a given token, and distinct domains must not correlate.
++// The constants are pairwise distinct mod 8 (odd-flavored trailing bits), so
++// low-truncated hashes never share more than the lowest 2 bits between
++// domains.
++enum class ProfileDomain : uint64_t {
++  kRendering = 0x72656e646572696eULL,
++  kWebGLCapability = 0x776562676c636170ULL,
++  kText = 0x7465787400000003ULL,
++  kFont = 0x666f6e7400000005ULL,
++  kDisplay = 0x646973706c617901ULL,
++};
++
++// A lazily-created, per-context profile that derives one stable hash per
++// fingerprinting domain from the context's high-entropy noise token. The
++// profile is invalidated whenever the owning context's token map changes.
++class CORE_EXPORT HeliumNoiseProfile final
++    : public GarbageCollected<HeliumNoiseProfile> {
++ public:
++  // Returns the profile for |context|, or nullptr when the context has no
++  // high-entropy token (fails open).
++  static HeliumNoiseProfile* From(ExecutionContext* context);
++
++  // Returns the stable hash for |domain|, derived from the high-entropy
++  // token and the domain value. Stable for a given token and independent
++  // across domains.
++  uint64_t Hash(ProfileDomain domain) const;
++
++  void Trace(Visitor* visitor) const {}
++
++ private:
++  friend class cppgc::MakeGarbageCollectedTrait<HeliumNoiseProfile>;
++
++  explicit HeliumNoiseProfile(HeliumNoiseToken token);
++
++  HeliumNoiseToken token_;
++};
++
++}  // namespace helium_noise
++}  // namespace blink
++
++#endif  // THIRD_PARTY_BLINK_RENDERER_CORE_HELIUM_NOISE_HELIUM_NOISE_PROFILE_H_
+Index: src/third_party/blink/renderer/core/page/page.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/page/page.cc
++++ src/third_party/blink/renderer/core/page/page.cc
+@@ -60,6 +60,7 @@
+ #include "third_party/blink/renderer/core/frame/viewport_data.h"
+ #include "third_party/blink/renderer/core/frame/visual_viewport.h"
+ #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
++#include "third_party/blink/renderer/core/helium_noise/helium_noise_profile.h"
+ #include "third_party/blink/renderer/core/html/fenced_frame/document_fenced_frames.h"
+ #include "third_party/blink/renderer/core/html/media/html_media_element.h"
+ #include "third_party/blink/renderer/core/inspector/console_message.h"
+@@ -1349,6 +1350,7 @@ void Page::Trace(Visitor* visitor) const
+   visitor->Trace(v8_compile_hints_consumer_);
+   visitor->Trace(close_task_handler_);
+   visitor->Trace(opener_);
++  visitor->Trace(helium_noise_profile_);
+   Supplementable<Page>::Trace(visitor);
+ }
+ 
+Index: src/third_party/blink/renderer/core/page/page.h
+===================================================================
+--- src.orig/third_party/blink/renderer/core/page/page.h
++++ src/third_party/blink/renderer/core/page/page.h
+@@ -74,6 +74,11 @@ class ColorProvider;
+ }  // namespace ui
+ 
+ namespace blink {
++
++namespace helium_noise {
++class HeliumNoiseProfile;
++}  // namespace helium_noise
++
+ class AutoscrollController;
+ class BrowserControls;
+ class ChromeClient;
+@@ -192,6 +197,10 @@ class CORE_EXPORT Page final : public Ga
+   }
+ 
+   void SetHeliumNoiseTokens(const HeliumNoiseTokenMap& noise_tokens) {
++    if (noise_tokens_ == noise_tokens) {
++      return;
++    }
++    helium_noise_profile_ = nullptr;
+     noise_tokens_ = noise_tokens;
+   }
+ 
+@@ -199,6 +208,14 @@ class CORE_EXPORT Page final : public Ga
+     return noise_tokens_;
+   }
+ 
++  helium_noise::HeliumNoiseProfile* GetHeliumNoiseProfile() const {
++    return helium_noise_profile_;
++  }
++
++  void SetHeliumNoiseProfile(helium_noise::HeliumNoiseProfile* profile) {
++    helium_noise_profile_ = profile;
++  }
++
+   void InitialStyleChanged();
+   void UAStyleChanged();
+   void UpdateAcceleratedCompositingSettings();
+@@ -690,6 +707,10 @@ class CORE_EXPORT Page final : public Ga
+   // Map of noise tokens for fingerprinting protection.
+   HeliumNoiseTokenMap noise_tokens_;
+ 
++  // Lazily-created profile derived from the page's high-entropy noise token.
++  // Cleared whenever the token map changes.
++  Member<helium_noise::HeliumNoiseProfile> helium_noise_profile_;
++
+   // This provider is used when forced color emulation is enabled via DevTools,
+   // overriding the light, dark or forced colors color providers.
+   std::unique_ptr<ui::ColorProvider> emulated_forced_colors_provider_;
+Index: src/third_party/blink/renderer/core/workers/dedicated_worker.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/workers/dedicated_worker.cc
++++ src/third_party/blink/renderer/core/workers/dedicated_worker.cc
+@@ -590,6 +590,7 @@ DedicatedWorker::CreateGlobalScopeCreati
+       origin_ ? origin_->IsolatedCopy() : nullptr,
+       std::move(coep_reporting_observer), std::move(dip_reporting_observer));
+   params->dedicated_worker_start_time = start_time_;
++  params->noise_tokens = execution_context->GetHeliumNoiseTokens();
+   return params;
+ }
+ 
+Index: src/third_party/blink/renderer/core/workers/global_scope_creation_params.h
+===================================================================
+--- src.orig/third_party/blink/renderer/core/workers/global_scope_creation_params.h
++++ src/third_party/blink/renderer/core/workers/global_scope_creation_params.h
+@@ -15,6 +15,7 @@
+ #include "services/metrics/public/cpp/ukm_source_id.h"
+ #include "services/network/public/cpp/permissions_policy/permissions_policy.h"
+ #include "services/network/public/mojom/referrer_policy.mojom-blink-forward.h"
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
+ #include "third_party/blink/public/common/permissions_policy/document_policy.h"
+ #include "third_party/blink/public/common/tokens/tokens.h"
+ #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
+@@ -261,6 +262,11 @@ struct CORE_EXPORT GlobalScopeCreationPa
+   // i.e. when DedicatedWorkerStart() was called.
+   std::optional<base::TimeTicks> dedicated_worker_start_time;
+ 
++  // Noise tokens inherited from the creator context. Only set for dedicated
++  // workers; empty for all other worker/worklet types. Snapshotted at worker
++  // start; later creator token updates are not propagated.
++  HeliumNoiseTokenMap noise_tokens;
++
+   // The parent ExecutionContext's Storage Access API status.
+   const net::StorageAccessApiStatus parent_storage_access_api_status;
+ 
+Index: src/third_party/blink/renderer/core/workers/worker_global_scope.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/workers/worker_global_scope.cc
++++ src/third_party/blink/renderer/core/workers/worker_global_scope.cc
+@@ -746,6 +746,7 @@ WorkerGlobalScope::WorkerGlobalScope(
+   SetOutsideContentSecurityPolicies(
+       std::move(creation_params->outside_content_security_policies));
+   SetWorkerSettings(std::move(creation_params->worker_settings));
++  SetHeliumNoiseTokens(creation_params->noise_tokens);
+ 
+   // TODO(sammc): Require a valid |creation_params->browser_interface_broker|
+   // once all worker types provide a valid
+Index: src/third_party/blink/renderer/core/page/page_test.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/page/page_test.cc
++++ src/third_party/blink/renderer/core/page/page_test.cc
+@@ -8,6 +8,7 @@
+ #include "base/unguessable_token.h"
+ #include "testing/gtest/include/gtest/gtest.h"
+ #include "third_party/blink/public/common/features.h"
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
+ #include "third_party/blink/renderer/core/loader/empty_clients.h"
+ #include "third_party/blink/renderer/core/page/scoped_browsing_context_group_pauser.h"
+ #include "third_party/blink/renderer/platform/scheduler/public/dummy_schedulers.h"
+@@ -23,7 +24,7 @@ TEST(PageTest, CreateOrdinaryBrowsingCon
+ 
+   Page* page =
+       Page::CreateOrdinary(*client, /*opener=*/nullptr, *scheduler, bcg_token,
+-                           /*color_provider_colors=*/nullptr);
++                           /*color_provider_colors=*/nullptr, {});
+ 
+   EXPECT_EQ(page->BrowsingContextGroupToken(), bcg_token);
+ }
+@@ -47,7 +48,7 @@ TEST(PageTest, BrowsingContextGroupUpdat
+ 
+   Page* page = Page::CreateOrdinary(*client, /*opener=*/nullptr, *scheduler,
+                                     initial_bcg_token,
+-                                    /*color_provider_colors=*/nullptr);
++                                    /*color_provider_colors=*/nullptr, {});
+ 
+   EXPECT_EQ(page->BrowsingContextGroupToken(), initial_bcg_token);
+ 
+@@ -70,7 +71,7 @@ TEST(PageTest, BrowsingContextGroupUpdat
+ 
+   Page* page1 =
+       Page::CreateOrdinary(*client, /*opener=*/nullptr, *scheduler, group_a,
+-                           /*color_provider_colors=*/nullptr);
++                           /*color_provider_colors=*/nullptr, {});
+ 
+   auto pauser_for_group_a =
+       std::make_unique<ScopedBrowsingContextGroupPauser>(*page1);
+@@ -82,7 +83,7 @@ TEST(PageTest, BrowsingContextGroupUpdat
+ 
+   Page* page2 =
+       Page::CreateOrdinary(*client, /*opener=*/nullptr, *scheduler, group_b,
+-                           /*color_provider_colors=*/nullptr);
++                           /*color_provider_colors=*/nullptr, {});
+   ASSERT_FALSE(page2->Paused());
+ 
+   page2->UpdateBrowsingContextGroup(group_a);
+@@ -100,7 +101,7 @@ TEST(PageTest, CreateOrdinaryColorProvid
+   auto color_provider_colors = ColorProviderColorMaps::CreateDefault();
+ 
+   Page* page = Page::CreateOrdinary(*client, /*opener=*/nullptr, *scheduler,
+-                                    bcg_token, &color_provider_colors);
++                                    bcg_token, &color_provider_colors, {});
+ 
+   const ui::ColorProvider* light_color_provider =
+       page->GetColorProviderForPainting(
+Index: src/third_party/blink/renderer/core/testing/dummy_page_holder.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/testing/dummy_page_holder.cc
++++ src/third_party/blink/renderer/core/testing/dummy_page_holder.cc
+@@ -34,6 +34,7 @@
+ 
+ #include "base/memory/ptr_util.h"
+ #include "services/metrics/public/cpp/ukm_source_id.h"
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
+ #include "third_party/blink/public/common/storage_key/storage_key.h"
+ #include "third_party/blink/public/common/tokens/tokens.h"
+ #include "third_party/blink/public/mojom/frame/policy_container.mojom-blink.h"
+@@ -103,7 +104,8 @@ DummyPageHolder::DummyPageHolder(
+   page_ = Page::CreateOrdinary(*chrome_client, /*opener=*/nullptr,
+                                *agent_group_scheduler_,
+                                base::UnguessableToken::Create(),
+-                               /*color_provider_colors=*/nullptr);
++                               /*color_provider_colors=*/nullptr,
++                               HeliumNoiseTokenMap());
+   Settings& settings = page_->GetSettings();
+   if (setting_overrider)
+     std::move(setting_overrider).Run(settings);
+Index: src/content/test/test_page_broadcast.cc
+===================================================================
+--- src.orig/content/test/test_page_broadcast.cc
++++ src/content/test/test_page_broadcast.cc
+@@ -70,6 +70,9 @@ void TestPageBroadcast::SetPageAttributi
+ 
+ void TestPageBroadcast::UpdateColorProviders(
+     const blink::ColorProviderColorMaps& color_provider_colors) {}
++void TestPageBroadcast::UpdateHeliumNoiseTokens(
++    const base::flat_map<blink::HeliumNoiseFeature, blink::HeliumNoiseToken>&
++        tokens) {}
+ 
+ void TestPageBroadcast::SetSupportsDraggableRegions(
+     bool supports_draggable_regions) {}
+Index: src/content/test/test_page_broadcast.h
+===================================================================
+--- src.orig/content/test/test_page_broadcast.h
++++ src/content/test/test_page_broadcast.h
+@@ -50,6 +50,9 @@
+       const base::UnguessableToken& browsing_context_group_token) override;
+   void UpdateColorProviders(
+       const blink::ColorProviderColorMaps& color_provider_colors) override;
++  void UpdateHeliumNoiseTokens(
++      const base::flat_map<blink::HeliumNoiseFeature, blink::HeliumNoiseToken>&
++          tokens) override;
+   void SetSupportsDraggableRegions(bool supports_draggable_regions) override;
+ 
+   mojo::AssociatedReceiver<blink::mojom::PageBroadcast> receiver_;
+Index: src/third_party/blink/renderer/core/frame/frame_test_helpers.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/frame/frame_test_helpers.cc
++++ src/third_party/blink/renderer/core/frame/frame_test_helpers.cc
+@@ -788,7 +788,7 @@ void WebViewHelper::InitializeWebView(
+       /*page_base_background_color=*/std::nullopt, browsing_context_group_token,
+       /*color_provider_colors=*/nullptr,
+       /*history_index=*/-1,
+-      /*history_length=*/0));
++      /*history_length=*/0, {}));
+   // This property must be set at initialization time, it is not supported to be
+   // changed afterward, and does nothing.
+   web_view_->GetSettings()->SetViewportEnabled(viewport_enabled_);
+@@ -832,7 +832,7 @@ WebViewImpl* WebViewHelper::CreateWebVie
+       /*browsing_context_group_token=*/base::UnguessableToken::Create(),
+       /*color_provider_colors=*/nullptr,
+       /*history_index=*/-1,
+-      /*history_length=*/0));
++      /*history_length=*/0, {}));
+ }
+ 
+ int TestWebFrameClient::loads_in_progress_ = 0;
+Index: src/third_party/blink/renderer/modules/peerconnection/webrtc_audio_renderer_test.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/modules/peerconnection/webrtc_audio_renderer_test.cc
++++ src/third_party/blink/renderer/modules/peerconnection/webrtc_audio_renderer_test.cc
+@@ -252,7 +252,7 @@ class WebRtcAudioRendererTest : public t
+             /*browsing_context_group_token=*/base::UnguessableToken::Create(),
+             /*color_provider_colors=*/nullptr,
+             /*history_index=*/-1,
+-            /*history_length=*/0)),
++            /*history_length=*/0, {})),
+         web_local_frame_(blink::WebLocalFrame::CreateMainFrame(
+             web_view_,
+             &web_local_frame_client_,
+Index: src/third_party/blink/renderer/modules/webrtc/webrtc_audio_device_impl_test.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/modules/webrtc/webrtc_audio_device_impl_test.cc
++++ src/third_party/blink/renderer/modules/webrtc/webrtc_audio_device_impl_test.cc
+@@ -220,7 +220,7 @@ class WebRtcAudioDeviceImplReleaseTest :
+         /*browsing_context_group_token=*/base::UnguessableToken::Create(),
+         /*color_provider_colors=*/nullptr,
+         /*history_index=*/-1,
+-        /*history_length=*/0);
++        /*history_length=*/0, {});
+ 
+     web_local_frame_ = blink::WebLocalFrame::CreateMainFrame(
+         web_view_, &web_local_frame_client_, nullptr, mojo::NullRemote(),
+Index: src/chrome/browser/helium_flag_choices.h
+===================================================================
+--- src.orig/chrome/browser/helium_flag_choices.h
++++ src/chrome/browser/helium_flag_choices.h
+@@ -37,6 +37,11 @@ constexpr const char kHeliumNoiseCanvasC
+ constexpr const char kHeliumNoiseAudioCommandLine[] = "helium-noise-audio";
+ constexpr const char kHeliumNoiseCpuCoresCommandLine[] =
+     "helium-noise-hw-concurrency";
++constexpr const char kHeliumNoiseWebGLCommandLine[] = "helium-noise-webgl";
++constexpr const char kHeliumNoiseTextGeometryCommandLine[] =
++    "helium-noise-text-geometry";
++constexpr const char kHeliumNoiseFontsCommandLine[] = "helium-noise-fonts";
++constexpr const char kHeliumNoiseDisplayCommandLine[] = "helium-noise-display";
+ 
+ }  // namespace helium
+ 
+Index: src/chrome/browser/helium_flag_entries.h
+===================================================================
+--- src.orig/chrome/browser/helium_flag_entries.h
++++ src/chrome/browser/helium_flag_entries.h
+@@ -48,6 +48,22 @@
+      "Randomizes the number of cores returned by "
+      "`navigator.hardwareConcurrency` in a reasonable range. Helium flag.",
+      kOsAll, FEATURE_VALUE_TYPE(blink::features::kHeliumNoiseCpuCores)},
++    {helium::kHeliumNoiseWebGLCommandLine,
++     "Helium Noise: WebGL",
++     "Enable coordinated WebGL protection.",
++     kOsAll, FEATURE_VALUE_TYPE(blink::features::kHeliumNoiseWebGL)},
++    {helium::kHeliumNoiseTextGeometryCommandLine,
++     "Helium Noise: Text geometry",
++     "Enable coordinated text geometry protection.",
++     kOsAll, FEATURE_VALUE_TYPE(blink::features::kHeliumNoiseTextGeometry)},
++    {helium::kHeliumNoiseFontsCommandLine,
++     "Helium Noise: Fonts",
++     "Enable coordinated font exposure protection.",
++     kOsAll, FEATURE_VALUE_TYPE(blink::features::kHeliumNoiseFonts)},
++    {helium::kHeliumNoiseDisplayCommandLine,
++     "Helium Noise: Display",
++     "Enable coordinated display geometry protection.",
++     kOsAll, FEATURE_VALUE_TYPE(blink::features::kHeliumNoiseDisplay)},
+     // core/network
+     // ui
+     // platform

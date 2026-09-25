@@ -1,0 +1,333 @@
+# Freezes the Network Information API at the desktop modal tuple so
+# navigator.connection cannot leak connection metrics for fingerprinting.
+# The API stays present and populated (matching a quiet desktop Chrome on
+# wifi), the change event never fires, and DevTools network emulation keeps
+# overriding the frozen values through the existing NetworkStateNotifier
+# override seam. Adapted from Cromite's connection-info handling.
+
+--- a/chrome/browser/helium_flag_choices.h
++++ b/chrome/browser/helium_flag_choices.h
+@@ -35,4 +35,6 @@
+ 
+ constexpr const char kHeliumNoiseCommandLine[] = "helium-noise";
++constexpr const char kHeliumNoiseNetworkInformationCommandLine[] =
++    "helium-noise-network-information";
+ constexpr const char kHeliumNoiseCanvasCommandLine[] = "helium-noise-canvas";
+ constexpr const char kHeliumNoiseAudioCommandLine[] = "helium-noise-audio";
+
+--- a/chrome/browser/helium_flag_entries.h
++++ b/chrome/browser/helium_flag_entries.h
+@@ -28,4 +28,10 @@
+      kOsDesktop,
+      FEATURE_VALUE_TYPE(blink::features::kHeliumMiddleClickAutoscroll)},
++    {helium::kHeliumNoiseNetworkInformationCommandLine,
++     "[Helium Noise] Freeze Network Information",
++     "Reports a fixed desktop connection profile (wifi, 4g, 10 Mbps downlink, "
++     "50 ms RTT) from navigator.connection and never fires its change event. "
++     "Helium flag.",
++     kOsAll, FEATURE_VALUE_TYPE(blink::features::kHeliumNoiseNetworkInformation)},
+     {helium::kHeliumNoiseCommandLine, "Helium Noise",
+      "Helium's anti-fingerprinting functionality. Adds insignificant noise to "
+
+--- a/third_party/blink/common/features.cc
++++ b/third_party/blink/common/features.cc
+@@ -75,6 +75,10 @@
+ // Coordinated display geometry protection for fingerprinting protection.
+ BASE_FEATURE(kHeliumNoiseDisplay, base::FEATURE_ENABLED_BY_DEFAULT);
+ 
++// Network Information API freezing for fingerprinting protection.
++BASE_FEATURE(kHeliumNoiseNetworkInformation,
++             base::FEATURE_ENABLED_BY_DEFAULT);
++
+ // Controls whether to include information about the page's open popup in
+ // AIPageContent.
+ BASE_FEATURE(kAIPageContentIncludePopupWindows,
+
+--- a/third_party/blink/public/common/features.h
++++ b/third_party/blink/public/common/features.h
+@@ -50,6 +50,7 @@
+ BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHeliumNoiseTextGeometry);
+ BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHeliumNoiseFonts);
+ BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHeliumNoiseDisplay);
++BLINK_COMMON_EXPORT BASE_DECLARE_FEATURE(kHeliumNoiseNetworkInformation);
+ 
+ // Controls whether to include information about the page's open popup in
+ // AIPageContent.
+
+--- a/third_party/blink/renderer/modules/netinfo/network_information.cc
++++ b/third_party/blink/renderer/modules/netinfo/network_information.cc
+@@ -6,7 +6,9 @@
+ 
+ #include <algorithm>
+ 
++#include "base/feature_list.h"
+ #include "base/time/time.h"
++#include "third_party/blink/public/common/features.h"
+ #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
+ #include "third_party/blink/public/platform/task_type.h"
+ #include "third_party/blink/renderer/bindings/modules/v8/v8_connection_type.h"
+@@ -27,6 +29,21 @@
+ 
+ namespace {
+ 
++// Desktop modal tuple reported while the freeze is active, matching a
++// quiet desktop Chrome on wifi (effectiveType "4g", 10 Mbps, 50 ms RTT).
++constexpr WebConnectionType kFrozenConnectionType = kWebConnectionTypeWifi;
++constexpr WebEffectiveConnectionType kFrozenEffectiveType =
++    WebEffectiveConnectionType::kType4G;
++constexpr uint32_t kFrozenHttpRttMsec = 50;
++constexpr double kFrozenDownlinkMbps = 10.0;
++
++bool ShouldFreezeNetworkInformation() {
++  return base::FeatureList::IsEnabled(blink::features::kHeliumNoise) &&
++         base::FeatureList::IsEnabled(
++             blink::features::kHeliumNoiseNetworkInformation) &&
++         !GetNetworkStateNotifier().HasOverride();
++}
++
+ V8ConnectionType::Enum ConnectionTypeToEnum(WebConnectionType type) {
+   switch (type) {
+     case kWebConnectionTypeCellular2G:
+@@ -84,6 +101,9 @@
+ }
+ 
+ V8ConnectionType NetworkInformation::type() const {
++  if (ShouldFreezeNetworkInformation()) {
++    return V8ConnectionType(ConnectionTypeToEnum(kFrozenConnectionType));
++  }
+   if (RuntimeEnabledFeatures::NetInfoConstantTypeEnabled()) {
+     return V8ConnectionType(V8ConnectionType::Enum::kUnknown);
+   }
+@@ -103,6 +123,9 @@
+   if (RuntimeEnabledFeatures::NetInfoConstantTypeEnabled()) {
+     return std::numeric_limits<double>::infinity();
+   }
++  if (ShouldFreezeNetworkInformation()) {
++    return kFrozenDownlinkMbps;
++  }
+ 
+   if (!IsObserving())
+     return GetNetworkStateNotifier().MaxBandwidth();
+@@ -111,6 +134,10 @@
+ }
+ 
+ V8EffectiveConnectionType NetworkInformation::effectiveType() {
++  if (ShouldFreezeNetworkInformation()) {
++    return V8EffectiveConnectionType(
++        EffectiveConnectionTypeToEnum(kFrozenEffectiveType));
++  }
+   MaybeShowWebHoldbackConsoleMsg();
+   std::optional<WebEffectiveConnectionType> override_ect =
+       GetNetworkStateNotifier().GetWebHoldbackEffectiveType();
+@@ -132,6 +159,9 @@
+ }
+ 
+ uint32_t NetworkInformation::rtt() {
++  if (ShouldFreezeNetworkInformation()) {
++    return kFrozenHttpRttMsec;
++  }
+   MaybeShowWebHoldbackConsoleMsg();
+   std::optional<base::TimeDelta> override_rtt =
+       GetNetworkStateNotifier().GetWebHoldbackHttpRtt();
+@@ -148,6 +178,9 @@
+ }
+ 
+ double NetworkInformation::downlink() {
++  if (ShouldFreezeNetworkInformation()) {
++    return kFrozenDownlinkMbps;
++  }
+   MaybeShowWebHoldbackConsoleMsg();
+   std::optional<double> override_downlink_mbps =
+       GetNetworkStateNotifier().GetWebHoldbackDownlinkThroughputMbps();
+@@ -182,6 +215,9 @@
+     const std::optional<double>& downlink_mbps,
+     bool save_data) {
+   DCHECK(GetExecutionContext()->IsContextThread());
++  if (ShouldFreezeNetworkInformation()) {
++    return;
++  }
+ 
+   const String host = Host();
+   uint32_t new_http_rtt_msec =
+@@ -274,6 +310,9 @@
+ }
+ 
+ void NetworkInformation::StartObserving() {
++  if (ShouldFreezeNetworkInformation()) {
++    return;
++  }
+   if (!IsObserving() && !context_stopped_) {
+     type_ = GetNetworkStateNotifier().ConnectionType();
+     DCHECK(!connection_observer_handle_);
+
+--- a/third_party/blink/renderer/platform/network/network_state_notifier.h
++++ b/third_party/blink/renderer/platform/network/network_state_notifier.h
+@@ -253,6 +253,11 @@
+   void SetSaveDataEnabledOverride(bool enabled);
+   void ClearOverride();
+ 
++  // Returns whether the network state has been overridden (e.g. by
++  // DevTools network emulation). Exposed so embedders can defer to the
++  // override seam instead of their own state shaping.
++  bool HasOverride() const { return has_override_; }
++
+   // Must be called on the given task runner. An added observer must be removed
+   // before the observer or its execution context goes away. It's possible for
+   // an observer to be called twice for the same event if it is first removed
+
+--- /dev/null
++++ b/third_party/blink/renderer/modules/netinfo/network_information_freeze_test.cc
+@@ -0,0 +1,153 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include <memory>
++#include <optional>
++#include <vector>
++
++#include "base/test/scoped_feature_list.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/common/features.h"
++#include "third_party/blink/public/platform/web_connection_type.h"
++#include "third_party/blink/public/platform/web_effective_connection_type.h"
++#include "third_party/blink/renderer/core/dom/document.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/core/frame/local_dom_window.h"
++#include "third_party/blink/renderer/core/testing/page_test_base.h"
++#include "third_party/blink/renderer/modules/netinfo/network_information.h"
++#include "third_party/blink/renderer/platform/network/network_state_notifier.h"
++#include "ui/gfx/geometry/size.h"
++
++namespace blink {
++namespace {
++
++// Frozen tuple the Network Information API reports while the freeze gate is
++// active: a quiet desktop Chrome on wifi.
++constexpr uint32_t kFrozenRttMsec = 50;
++constexpr double kFrozenDownlink = 10.0;
++
++class NetworkInformationFreezeTest : public PageTestBase {
++ public:
++  void SetUp() override { PageTestBase::SetUp(gfx::Size()); }
++
++  void TearDown() override {
++    GetNetworkStateNotifier().ClearOverride();
++    scoped_feature_list_.reset();
++    PageTestBase::TearDown();
++  }
++
++  void EnableFreeze() { ApplyFeatureStates(true, true); }
++
++  void DisableMasterFeature() { ApplyFeatureStates(false, true); }
++
++  NetworkInformation* Connection() {
++    NetworkInformation* connection =
++        NetworkInformation::connection(*GetDocument().domWindow()->navigator());
++    EXPECT_TRUE(connection);
++    return connection;
++  }
++
++  // Pushes a full network-state change through the notifier so any live
++  // observers (none under the freeze) would observe it.
++  void PushNetworkStateChange() {
++    NetworkStateNotifier& notifier = GetNetworkStateNotifier();
++    notifier.SetWebConnection(kWebConnectionTypeCellular3G, 1.5);
++    notifier.SetNetworkQuality(WebEffectiveConnectionType::kType2G,
++                               base::Milliseconds(800), base::Milliseconds(400),
++                               100);
++    notifier.SetSaveDataEnabled(true);
++  }
++
++ private:
++  void ApplyFeatureStates(bool master, bool sub) {
++    scoped_feature_list_.reset();
++    scoped_feature_list_ = std::make_unique<base::test::ScopedFeatureList>();
++    scoped_feature_list_->InitWithFeatureStates(
++        {{blink::features::kHeliumNoise, master},
++         {blink::features::kHeliumNoiseNetworkInformation, sub}});
++  }
++
++  std::unique_ptr<base::test::ScopedFeatureList> scoped_feature_list_;
++};
++
++// Fresh context exposes the frozen desktop tuple on every accessor.
++TEST_F(NetworkInformationFreezeTest, FreshContextReportsFrozenTuple) {
++  EnableFreeze();
++  NetworkInformation* connection = Connection();
++  EXPECT_EQ(V8ConnectionType::Enum::kWifi, connection->type().AsEnum());
++  EXPECT_EQ(V8EffectiveConnectionType::Enum::k4G,
++            connection->effectiveType().AsEnum());
++  EXPECT_EQ(kFrozenRttMsec, connection->rtt());
++  EXPECT_EQ(kFrozenDownlink, connection->downlink());
++  EXPECT_EQ(kFrozenDownlink, connection->downlinkMax());
++  EXPECT_FALSE(connection->saveData());
++}
++
++// The freeze must ride out a real network-state push with no change event,
++// no observer registration, and no pending-activity lifetime extension.
++TEST_F(NetworkInformationFreezeTest, NetworkPushNeverFiresChangeOrObserves) {
++  EnableFreeze();
++  NetworkInformation* connection = Connection();
++
++  PushNetworkStateChange();
++
++  EXPECT_FALSE(connection->HasEventListeners());
++  EXPECT_FALSE(connection->HasPendingActivity());
++  EXPECT_EQ(V8ConnectionType::Enum::kWifi, connection->type().AsEnum());
++  EXPECT_EQ(V8EffectiveConnectionType::Enum::k4G,
++            connection->effectiveType().AsEnum());
++  EXPECT_EQ(kFrozenRttMsec, connection->rtt());
++  EXPECT_EQ(kFrozenDownlink, connection->downlink());
++}
++
++// DevTools network emulation rides the NetworkStateNotifier override seam;
++// the freeze must not shadow it while it is active.
++TEST_F(NetworkInformationFreezeTest, DevToolsEmulationOverridesFrozenValues) {
++  EnableFreeze();
++  NetworkInformation* connection = Connection();
++
++  GetNetworkStateNotifier().SetNetworkConnectionInfoOverride(
++      /*on_line=*/true, kWebConnectionTypeCellular3G,
++      WebEffectiveConnectionType::kType3G, /*http_rtt_msec=*/800,
++      /*max_bandwidth_mbps=*/1.5);
++
++  EXPECT_EQ(V8ConnectionType::Enum::kCellular, connection->type().AsEnum());
++  EXPECT_EQ(V8EffectiveConnectionType::Enum::k3G,
++            connection->effectiveType().AsEnum());
++  EXPECT_EQ(800u, connection->rtt());
++  EXPECT_EQ(1.5, connection->downlinkMax());
++  EXPECT_EQ(1.5, connection->downlink());
++
++  EXPECT_TRUE(GetNetworkStateNotifier().HasOverride());
++  GetNetworkStateNotifier().ClearOverride();
++  EXPECT_EQ(V8ConnectionType::Enum::kWifi, connection->type().AsEnum());
++  EXPECT_EQ(V8EffectiveConnectionType::Enum::k4G,
++            connection->effectiveType().AsEnum());
++  EXPECT_EQ(kFrozenRttMsec, connection->rtt());
++}
++
++// With the master gate off the whole freeze fails open to native values,
++// which track whatever the notifier reports.
++TEST_F(NetworkInformationFreezeTest, MasterFeatureOffReportsNativeValues) {
++  DisableMasterFeature();
++  NetworkInformation* connection = Connection();
++
++  PushNetworkStateChange();
++
++  EXPECT_EQ(V8ConnectionType::Enum::kCellular, connection->type().AsEnum());
++  EXPECT_EQ(V8EffectiveConnectionType::Enum::k2G,
++            connection->effectiveType().AsEnum());
++  EXPECT_FALSE(connection->saveData()) << "saveData stays false because the "
++                                          "notifier SaveDataEnabled is false "
++                                          "in this test environment";
++  EXPECT_EQ(0u, connection->rtt()) << "native HTTP RTT is unset in the test "
++                                      "notifier, so it rounds to 0";
++}
++
++}  // namespace
++}  // namespace blink

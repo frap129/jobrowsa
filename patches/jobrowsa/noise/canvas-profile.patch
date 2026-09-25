@@ -1,0 +1,181 @@
+Index: src/third_party/blink/renderer/core/helium_noise/build.gni
+===================================================================
+--- src.orig/third_party/blink/renderer/core/helium_noise/build.gni
++++ src/third_party/blink/renderer/core/helium_noise/build.gni
+@@ -13,4 +13,5 @@ blink_core_sources_helium_noise = [
+ 
+ blink_core_tests_helium_noise = [
+   "helium_noise_profile_test.cc",
++  "canvas_noising_helper_test.cc",
+ ]
+Index: src/third_party/blink/renderer/core/helium_noise/canvas_noising_helper_test.cc
+===================================================================
+--- /dev/null
++++ src/third_party/blink/renderer/core/helium_noise/canvas_noising_helper_test.cc
+@@ -0,0 +1,129 @@
++// Copyright 2026 The Helium Authors
++// You can use, redistribute, and/or modify this source code under
++// the terms of the GPL-3.0 license that can be found in the LICENSE file.
++// -----------------------------------------------------------------------
++// Copyright 2026 The Chromium Authors
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include "third_party/blink/renderer/core/helium_noise/canvas_noising_helper.h"
++
++#include <cstdint>
++#include <vector>
++
++#include "base/check.h"
++#include "base/test/scoped_feature_list.h"
++#include "testing/gtest/include/gtest/gtest.h"
++#include "third_party/blink/public/common/features.h"
++#include "third_party/blink/public/common/helium_noise/noise_token.h"
++#include "third_party/blink/renderer/core/dom/document.h"
++#include "third_party/blink/renderer/core/execution_context/execution_context.h"
++#include "third_party/blink/renderer/core/page/page.h"
++#include "third_party/blink/renderer/core/testing/page_test_base.h"
++#include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
++#include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
++#include "third_party/skia/include/core/SkBitmap.h"
++#include "third_party/skia/include/core/SkImageInfo.h"
++#include "ui/gfx/geometry/size.h"
++
++namespace blink {
++namespace {
++
++class ScopedHeliumFeatures {
++ public:
++  ScopedHeliumFeatures(bool master, bool canvas) {
++    feature_list_.InitWithFeatureStates(
++        {{blink::features::kHeliumNoise, master},
++         {blink::features::kHeliumNoiseCanvas, canvas}});
++  }
++
++ private:
++  base::test::ScopedFeatureList feature_list_;
++};
++
++class CanvasNoisingHelperTest : public PageTestBase {
++ public:
++  void SetUp() override { PageTestBase::SetUp(gfx::Size()); }
++
++  ExecutionContext* Context() const {
++    ExecutionContext* context = GetDocument().GetExecutionContext();
++    EXPECT_TRUE(context);
++    return context;
++  }
++
++  void SetHighEntropyToken(uint64_t value) {
++    HeliumNoiseTokenMap tokens = GetPage().GetHeliumNoiseTokens();
++    tokens.insert_or_assign(HeliumNoiseFeature::kHighEntropy,
++                            HeliumNoiseToken(value));
++    GetPage().SetHeliumNoiseTokens(tokens);
++  }
++
++  void SetCompatibilityCanvasToken(uint64_t value) {
++    HeliumNoiseTokenMap tokens = GetPage().GetHeliumNoiseTokens();
++    tokens.insert_or_assign(HeliumNoiseFeature::kCanvas,
++                            HeliumNoiseToken(value));
++    GetPage().SetHeliumNoiseTokens(tokens);
++  }
++
++  scoped_refptr<StaticBitmapImage> MakeOpaqueRgba8888Image() {
++    SkBitmap bitmap;
++    bitmap.allocPixels(SkImageInfo::Make(8, 8, kRGBA_8888_SkColorType,
++                                         kOpaque_SkAlphaType));
++    for (int y = 0; y < 8; ++y) {
++      for (int x = 0; x < 8; ++x) {
++        uint8_t* pixel = static_cast<uint8_t*>(bitmap.getAddr(x, y));
++        for (size_t channel = 0; channel < 3; ++channel) {
++          pixel[channel] = static_cast<uint8_t>(
++              1 + (x * 31 + y * 17 + channel * 5) % 255);
++        }
++        pixel[3] = 255;
++      }
++    }
++    return UnacceleratedStaticBitmapImage::Create(bitmap.asImage());
++  }
++
++  std::vector<uint8_t> CopyPixels(scoped_refptr<StaticBitmapImage> image) {
++    SkImageInfo info = SkImageInfo::Make(
++        image->GetSize().width(), image->GetSize().height(),
++        kRGBA_8888_SkColorType, kUnpremul_SkAlphaType,
++        image->GetColorSpace().ToSkColorSpace());
++    std::vector<uint8_t> pixels(info.computeMinByteSize());
++    CHECK(image->PaintImageForCurrentFrame().readPixels(
++        info, pixels.data(), info.minRowBytes(), 0, 0));
++    return pixels;
++  }
++};
++
++TEST_F(CanvasNoisingHelperTest, MasterGateDisabledFailsOpen) {
++  ScopedHeliumFeatures features(/*master=*/false, /*canvas=*/true);
++  SetCompatibilityCanvasToken(23);
++  SetHighEntropyToken(17);
++  auto image = MakeOpaqueRgba8888Image();
++  const auto before = CopyPixels(image);
++  CanvasNoisingHelper::MaybeNoiseSnapshot(Context(), image);
++  EXPECT_EQ(before, CopyPixels(image));
++}
++
++TEST_F(CanvasNoisingHelperTest, HighEntropyTokenControlsRenderingNoise) {
++  ScopedHeliumFeatures features(/*master=*/true, /*canvas=*/true);
++  auto first = MakeOpaqueRgba8888Image();
++  auto second = MakeOpaqueRgba8888Image();
++  SetHighEntropyToken(17);
++  CanvasNoisingHelper::MaybeNoiseSnapshot(Context(), first);
++  SetHighEntropyToken(17);
++  CanvasNoisingHelper::MaybeNoiseSnapshot(Context(), second);
++  EXPECT_EQ(CopyPixels(first), CopyPixels(second));
++  EXPECT_NE(CopyPixels(MakeOpaqueRgba8888Image()), CopyPixels(first));
++}
++
++TEST_F(CanvasNoisingHelperTest, MissingProfileFailsOpen) {
++  ScopedHeliumFeatures features(/*master=*/true, /*canvas=*/true);
++  SetCompatibilityCanvasToken(23);
++  auto image = MakeOpaqueRgba8888Image();
++  const auto before = CopyPixels(image);
++  CanvasNoisingHelper::MaybeNoiseSnapshot(Context(), image);
++  EXPECT_EQ(before, CopyPixels(image));
++}
++
++}  // namespace
++}  // namespace blink
+Index: src/third_party/blink/renderer/core/helium_noise/canvas_noising_helper.cc
+===================================================================
+--- src.orig/third_party/blink/renderer/core/helium_noise/canvas_noising_helper.cc
++++ src/third_party/blink/renderer/core/helium_noise/canvas_noising_helper.cc
+@@ -25,6 +25,7 @@
+ #include "third_party/blink/public/common/features.h"
+ #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+ #include "third_party/blink/renderer/core/helium_noise/helium_noise_hash.h"
++#include "third_party/blink/renderer/core/helium_noise/helium_noise_profile.h"
+ #include "third_party/blink/renderer/core/html/canvas/image_data.h"
+ #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
+ #include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
+@@ -484,17 +485,16 @@ void HeliumNoiseHalfFloatPixels(const He
+ 
+ std::optional<HeliumNoiseHash> GetCanvasTokenHash(
+     ExecutionContext* execution_context) {
+-  if (!base::FeatureList::IsEnabled(blink::features::kHeliumNoiseCanvas)) {
++  if (!execution_context ||
++      !base::FeatureList::IsEnabled(blink::features::kHeliumNoise) ||
++      !base::FeatureList::IsEnabled(blink::features::kHeliumNoiseCanvas)) {
+     return std::nullopt;
+   }
+-
+-  if (!execution_context || !execution_context->GetHeliumNoiseTokens().contains(
+-                                HeliumNoiseFeature::kCanvas)) {
++  auto* profile = helium_noise::HeliumNoiseProfile::From(execution_context);
++  if (!profile)
+     return std::nullopt;
+-  }
+-
+-  return HeliumNoiseHash(execution_context->GetHeliumNoiseTokens().at(
+-      HeliumNoiseFeature::kCanvas));
++  return HeliumNoiseHash(HeliumNoiseToken(
++      profile->Hash(helium_noise::ProfileDomain::kRendering)));
+ }
+ 
+ bool IsSupportedNoisingColorType(SkColorType color_type) {
