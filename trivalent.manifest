@@ -84,7 +84,7 @@ patches/trivalent/security/disable-printing-by-default.patch 387baa5a512f3aaba0e
 patches/trivalent/security/disable-remote-access-by-default.patch b857b0924e66903cdd28773cc871d1fae4cfa901 pristine
 patches/trivalent/security/disable-various-content-settings-by-default.patch 12efe480c3558a4e2b2e0435ff8bbc236fb64ee5 pristine
 patches/trivalent/security/enable-partitionalloc-advanced-checks.patch 620c5c9befe4182cb0265a89110dfe36150269d8 pristine
-patches/trivalent/security/enable-strict-extension-verification.patch c0e8d1a4ae611bacb8a261e141023ded0e98d4bd pristine
+patches/trivalent/security/enable-strict-extension-verification.patch c0e8d1a4ae611bacb8a261e141023ded0e98d4bd dropped
 patches/trivalent/security/extension-access-hardening.patch d5944ce080e440ebb27b3426ca37b2b0854d419d adapted
 patches/trivalent/security/isolate-sandboxed-iframes-by-document.patch a4b478db6d47308e9d3cf5fbffca4eb2a860d03c pristine
 patches/trivalent/security/network-service-sandbox-config.patch 09a3ea2da8b43ed41eaf12dfd5f3c320869d2253 pristine

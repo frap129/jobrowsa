@@ -81,7 +81,6 @@ trivalent/security/disable-remote-access-by-default.patch
 trivalent/security/disable-various-content-settings-by-default.patch
 trivalent/security/disable-webgpu.patch
 trivalent/security/enable-partitionalloc-advanced-checks.patch
-trivalent/security/enable-strict-extension-verification.patch
 trivalent/security/extension-access-hardening.patch
 trivalent/security/isolate-sandboxed-iframes-by-document.patch
 trivalent/security/network-service-sandbox-config.patch
