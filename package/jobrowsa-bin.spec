@@ -11,6 +11,7 @@ Source0: jobrowsa-%{version}-x86_64_linux.tar.xz
 Source1: jobrowsa-%{version}-arm64_linux.tar.xz
 
 %if 0%{?debbuild}
+Packager: Joe Maples <joe@maples.dev>
 Provides: www-browser
 %endif
 
