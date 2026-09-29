@@ -5,6 +5,7 @@ I'm tired of elements and sciency names. This is my fork, Joe's fork, Joe's bows
 A fork of Helium for Linux with:
 - Address bar in side panel [(adapted from #2367)](https://api.github.com/repos/imputnet/helium/pulls/2367)
 - Trivalent's patches, including Vanadium
+  - Webstore extension verification patch dropped (it breaks Web Store extensions)
 - Fingerprinting Improvements:
   - Timezone normalized to anonymity cohort representatives (e.g. `America/Toronto` reports as `America/New_York`); fixed offsets like UTC are left untouched
   - CPU count and device memory reported from coordinated capability-safe hardware profiles, so `navigator.hardwareConcurrency` and `navigator.deviceMemory` always describe a plausible machine
