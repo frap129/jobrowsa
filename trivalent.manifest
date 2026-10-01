@@ -1,7 +1,7 @@
 # trivalent.manifest - provenance for vendored secureblue/Trivalent patches
 # header: pinned upstream snapshot commit
 # entries: <upstream-path> <upstream-blob-sha> <disposition: pristine|adapted|dropped>
-trivalent-snapshot 594b636da6a876945d671f2fa5cadd75765e7851
+trivalent-snapshot 8651c6957db032613e2c19d16d3523db4b374c98
 patches/third_party/vanadium/0067-disable-navigation-error-correction-by-default.patch 8f808a915db48980a8b6cc5a73f7a92ca323173a dropped
 patches/third_party/vanadium/0069-disable-network-prediction-by-default.patch 6e47c969c0d53622986c80ac5487e80c391800c8 dropped
 patches/third_party/vanadium/0071-disable-hyperlink-auditing-by-default.patch 754d0d17a02071652ab4075a78aea66081f845c3 dropped
