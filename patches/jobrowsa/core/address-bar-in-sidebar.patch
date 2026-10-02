@@ -1070,13 +1070,12 @@
    auto* controller =
        tabs::VerticalTabStripStateController::From(browser_view_->browser());
    if (!controller) {
-@@ -1988,12 +2010,125 @@
-   // The view may not be visible when attached (vertical -> compact),
-   // so ensure it is.
-   tab_strip_region_view_->SetVisible(true);
--
-+}
-+
+@@ -2108,15 +2130,130 @@
+           .WithOrder(kTabStripFlexOrder));
+ 
+   InvalidateLayout();
+ }
+ 
 +void ToolbarView::SetSidebarControlsHost(VerticalTabStripHeaderView* host) {
 +  if (sidebar_controls_host_ == host) {
 +    return;
@@ -1169,14 +1168,14 @@
 +  }
 +  OnShowMediaButtonChanged();
 +  UpdateToolbarLayout();
-   InvalidateLayout();
- }
- 
++  InvalidateLayout();
++}
++
  void ToolbarView::UpdateToolbarLayout() {
    if (!location_bar_) {
-+    return;
-+  }
-+
+     return;
+   }
+ 
 +  if (sidebar_controls_host_) {
 +    auto hide_if_child = [this](views::View* view) {
 +      if (view && view->parent() == this) {
@@ -1194,31 +1193,15 @@
 +    hide_if_child(vertical_tabs_collapse_button_);
 +    hide_if_child(dynamic_new_tab_button_);
 +    hide_if_child(overflow_button_);
-     return;
-   }
++    return;
++  }
++
+   UpdateVerticalTabsCollapseButton();
+   UpdateDynamicNewTabButton();
  
-@@ -2036,15 +2171,17 @@
-     location_bar_view_->SetProperty(views::kFlexBehaviorKey,
-                                     location_bar_flex_rule);
-     if (is_compact_layout) {
--      location_bar_view_->SetPreferredSize(gfx::Size(kPreferredCompactWidth, 0));
-+      location_bar_view_->SetPreferredSize(
-+          gfx::Size(kPreferredCompactWidth, 0));
-       location_bar_view_->SetProperty(
--          views::kMarginsKey, gfx::Insets::TLBR(0, location_bar_margin, 0, 0));
-+          views::kMarginsKey,
-+          gfx::Insets::TLBR(0, location_bar_margin, 0, 0));
-     } else {
-       location_bar_view_->SetPreferredSize(std::nullopt);
-       location_bar_view_->SetProperty(views::kMarginsKey,
-                                       gfx::Insets::VH(0, location_bar_margin));
-     }
--  } else {
-+  } else if (toolbar_webview_) {
-     // If the location bar is part of a WebView, make that stretchable.
-     toolbar_webview_->SetProperty(views::kFlexBehaviorKey,
-                                   location_bar_flex_rule);
-@@ -2119,10 +2256,13 @@
+   if (vertical_tabs_collapse_button_) {
+     const size_t target_index =
+@@ -2210,12 +2347,15 @@
        tabs::VerticalTabStripStateController::From(browser_view_->browser());
    const bool zen_hide = browser_view_->IsZenModeEnabledForLayout() &&
                          !browser_view_->IsZenModeSideChromePinned();
@@ -1228,7 +1211,9 @@
                             show_vertical_tabs_collapse_button_.GetValue() &&
 -                           !zen_hide;
 +                           !zen_hide && !address_in_sidebar;
-   vertical_tabs_collapse_button_->SetVisible(should_show);
+   // Let overflow layout decide whether the eligible button fits.
+   views::ManualLayoutUtil(layout_manager_)
+       .SetViewHidden(vertical_tabs_collapse_button_, !should_show);
 +  vertical_tabs_collapse_button_->SetEnabled(!address_in_sidebar);
  
    if (!should_show) {
