@@ -55,7 +55,7 @@ patches/trivalent/dns-providers.patch 302658fca4195b239fd65489ce0a76eac9604157 a
 patches/trivalent/enable-parallel-downloading-by-default.patch 8c6bd7a3bf3bab5e80de4f7386868dff88be9da9 dropped
 patches/trivalent/expose-flags.patch 2cfd36dc5b9148bf0d6e4b614d03e32f328d22ec adapted
 patches/trivalent/force-disable-safe-browsing.patch 19fab52be1c35cbd9db9426a931569cf23e39a75 adapted
-patches/trivalent/force-third-party-ntp.patch bdb0036ecb4139949cbfed32292b99fc27352cc0 pristine
+patches/trivalent/force-third-party-ntp.patch bdb0036ecb4139949cbfed32292b99fc27352cc0 adapted
 patches/trivalent/hide-ui-popup-text.patch 65ba4c73c86ea5772cc78cc74daf173198465471 pristine
 patches/trivalent/increase-style-filter-limits.patch 88f5d9b4aeb5d8f751b92f8736ecb32a2bc58ca4 pristine
 patches/trivalent/privacy/add-cross-origin-referrer-clearing-feature.patch 890609676178305b0a13c2474dc6a0e1f3f32c54 adapted
