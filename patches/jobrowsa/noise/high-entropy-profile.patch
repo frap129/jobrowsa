@@ -705,10 +705,10 @@ Index: src/third_party/blink/renderer/core/workers/dedicated_worker.cc
 ===================================================================
 --- src.orig/third_party/blink/renderer/core/workers/dedicated_worker.cc
 +++ src/third_party/blink/renderer/core/workers/dedicated_worker.cc
-@@ -602,6 +602,7 @@
-   // TODO(crbug.com/40786013): Inherit report-only Document-Policy once worker
+@@ -624,6 +624,7 @@
    // global scopes support Document-Policy violation reporting.
  
+   params->dedicated_worker_script_initiator_url = worker_script_initiator_url_;
 +  params->noise_tokens = execution_context->GetHeliumNoiseTokens();
    return params;
  }
