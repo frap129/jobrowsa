@@ -177,7 +177,7 @@ change is needed there.
  #include "third_party/blink/renderer/core/execution_context/execution_context.h"
  #include "third_party/blink/renderer/core/frame/navigator_concurrent_hardware.h"
  #include "third_party/blink/renderer/core/helium_noise/helium_noise_hash.h"
-@@ -38,6 +39,12 @@
+@@ -53,6 +54,12 @@
  #elif BUILDFLAG(IS_FUCHSIA)
    return "";
  #elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
@@ -187,6 +187,6 @@ change is needed there.
 +  if (blink::helium_noise::IsWindowsIdentityEnabled()) {
 +    return "Win32";
 +  }
-   return "Linux x86_64";
+   return kLinuxX86_64;
  #elif BUILDFLAG(IS_IOS)
    return "iPhone";
