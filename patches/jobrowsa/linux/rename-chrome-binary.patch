@@ -45,9 +45,9 @@
    }
  
    executable("chrome_initial") {
-@@ -1697,19 +1697,19 @@
-       ]
+@@ -1878,20 +1878,20 @@
      }
+ 
      extract_symbols("chrome_symbols") {
 -      binary = "$root_out_dir/helium"
 +      binary = "$root_out_dir/jobrowsa"
@@ -63,6 +63,7 @@
  
        deps = [ ":chrome" ]
      }
+ 
      extract_symbols("chrome_crashpad_symbols") {
 -      binary = "$root_out_dir/helium_crashpad_handler"
 +      binary = "$root_out_dir/jobrowsa_crashpad_handler"
