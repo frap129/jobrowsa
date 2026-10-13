@@ -1,13 +1,13 @@
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -2619,6 +2619,7 @@
-       "views/session_crashed_bubble_view.h",
+@@ -2772,6 +2772,7 @@
+       "views/helium/native_frame_materials.h",
        "views/tab_search_bubble_host.cc",
        "views/tab_search_bubble_host.h",
 +      "views/tabs/vertical/vertical_tab_strip_header_view.cc",
-       "views/web_apps/create_shortcut_confirmation_view.cc",
-       "views/web_apps/create_shortcut_confirmation_view.h",
        "views/web_apps/frame_toolbar/web_app_frame_toolbar_view.cc",
+       "views/web_apps/frame_toolbar/web_app_frame_toolbar_view.h",
+       "views/web_apps/frame_toolbar/web_app_menu_button.cc",
 --- a/chrome/browser/ui/views/tabs/vertical/BUILD.gn
 +++ b/chrome/browser/ui/views/tabs/vertical/BUILD.gn
 @@ -12,6 +12,7 @@
@@ -550,22 +550,12 @@
  void BrowserView::ToggleZenModeSideChrome() {
    if (!IsZenModeEnabled() || !ShouldDrawVerticalTabStrip()) {
      return;
-@@ -1769,18 +1842,43 @@
+@@ -1805,26 +1878,52 @@
  
  void BrowserView::OnToolbarTabStripStateChanged(
      HeliumLayoutStateController* controller) {
 -  if (!horizontal_tab_strip_region_view_) {
 -    return;
--  }
--
--  if (controller && controller->IsCompactLayout() && GetIsNormalType()) {
--    toolbar_->AttachTabStripRegionView(horizontal_tab_strip_region_view_);
--  } else if (horizontal_tab_strip_region_view_->parent() != this) {
--    if (horizontal_tab_strip_region_insertion_index_) {
--      AddChildViewAt(horizontal_tab_strip_region_view_.get(),
--                     horizontal_tab_strip_region_insertion_index_.value());
--    } else {
--      AddChildView(horizontal_tab_strip_region_view_.get());
 +  if (horizontal_tab_strip_region_view_) {
 +    if (controller && controller->IsCompactLayout() && GetIsNormalType()) {
 +      toolbar_->AttachTabStripRegionView(horizontal_tab_strip_region_view_);
@@ -576,9 +566,18 @@
 +      } else {
 +        AddChildView(horizontal_tab_strip_region_view_.get());
 +      }
++      horizontal_tab_strip_region_view_->DestroyLayer();
 +    }
-+  }
-+
+   }
+ 
+-  if (controller && controller->IsCompactLayout() && GetIsNormalType()) {
+-    toolbar_->AttachTabStripRegionView(horizontal_tab_strip_region_view_);
+-  } else if (horizontal_tab_strip_region_view_->parent() != this) {
+-    if (horizontal_tab_strip_region_insertion_index_) {
+-      AddChildViewAt(horizontal_tab_strip_region_view_.get(),
+-                     horizontal_tab_strip_region_insertion_index_.value());
+-    } else {
+-      AddChildView(horizontal_tab_strip_region_view_.get());
 +  if (controller && controller->IsVerticalAddressBarInSidebar()) {
 +    auto* vertical_tabs_controller =
 +        tabs::VerticalTabStripStateController::From(browser_);
@@ -604,9 +603,10 @@
 +    if (toolbar_) {
 +      toolbar_->RestoreToolbarControls();
      }
+-    horizontal_tab_strip_region_view_->DestroyLayer();
    }
  
-@@ -1788,6 +1886,7 @@
+   if (toolbar_) {
      toolbar_->UpdateToolbarLayout();
    }
  
@@ -1201,7 +1201,7 @@
  
    if (vertical_tabs_collapse_button_) {
      const size_t target_index =
-@@ -2210,12 +2347,15 @@
+@@ -2314,14 +2451,17 @@
        tabs::VerticalTabStripStateController::From(browser_view_->browser());
    const bool zen_hide = browser_view_->IsZenModeEnabledForLayout() &&
                          !browser_view_->IsZenModeSideChromePinned();
@@ -1212,8 +1212,10 @@
 -                           !zen_hide;
 +                           !zen_hide && !address_in_sidebar;
    // Let overflow layout decide whether the eligible button fits.
-   views::ManualLayoutUtil(layout_manager_)
-       .SetViewHidden(vertical_tabs_collapse_button_, !should_show);
+   if (should_show != layout_manager_->CanBeVisible(
+           vertical_tabs_collapse_button_)) {
+     vertical_tabs_collapse_button_->SetVisible(should_show);
+   }
 +  vertical_tabs_collapse_button_->SetEnabled(!address_in_sidebar);
  
    if (!should_show) {
@@ -1274,66 +1276,6 @@
                            /*native_view_for_gestures=*/gfx::NativeView(),
                            /*corners=*/std::nullopt,
                            "Chrome.AppMenu.MenuHostInitToNextFramePresented");
---- a/chrome/browser/ui/views/extensions/extension_action_delegate_desktop.cc
-+++ b/chrome/browser/ui/views/extensions/extension_action_delegate_desktop.cc
-@@ -87,14 +87,13 @@
-   // ExtensionViewHost). This doesn't necessarily mean that the popup has
-   // completed rendering on the screen.
-   has_opened_popup_ = true;
- 
--  // TOP_RIGHT is correct for both RTL and LTR, because the views platform
--  // performs the flipping in RTL cases.
--  views::BubbleBorder::Arrow arrow = views::BubbleBorder::TOP_RIGHT;
-+  const views::BubbleAnchor anchor =
-+      extensions_container_views_->GetReferenceButtonForPopup(model_->GetId());
-   ExtensionPopup::ShowPopup(
--      browser_, std::move(host),
--      extensions_container_views_->GetReferenceButtonForPopup(model_->GetId()),
--      arrow, show_action, std::move(callback));
-+      browser_, std::move(host), anchor,
-+      BrowserView::GetSidebarBubbleArrow(anchor), show_action,
-+      std::move(callback));
- 
-   extensions_container_views_->OnPopupShown(model_->GetId(), by_user);
- }
---- a/chrome/browser/ui/views/extensions/extensions_menu_coordinator.cc
-+++ b/chrome/browser/ui/views/extensions/extensions_menu_coordinator.cc
-@@ -12,6 +12,7 @@
- #include "chrome/browser/ui/extensions/extensions_menu_view_model.h"
- #include "chrome/browser/ui/views/chrome_layout_provider.h"
- #include "chrome/browser/ui/views/extensions/extensions_menu_delegate_desktop.h"
-+#include "chrome/browser/ui/views/frame/browser_view.h"
- #include "extensions/common/extension_features.h"
- #include "ui/base/mojom/dialog_button.mojom.h"
- #include "ui/views/bubble/bubble_dialog_delegate_view.h"
-@@ -80,6 +81,8 @@
-   DCHECK(base::FeatureList::IsEnabled(
-       extensions_features::kExtensionsMenuAccessControl));
-+  const views::BubbleBorder::Arrow arrow =
-+      BrowserView::GetSidebarBubbleArrow(anchor);
-   auto bubble_delegate = std::make_unique<views::BubbleDialogDelegate>(
--      anchor, views::BubbleBorder::TOP_RIGHT,
-+      anchor, arrow,
-       views::BubbleBorder::DIALOG_SHADOW, /*autosize=*/true);
-   bubble_delegate->SetOwnedByWidget(
---- a/chrome/browser/ui/views/extensions/extensions_menu_view.cc
-+++ b/chrome/browser/ui/views/extensions/extensions_menu_view.cc
-@@ -22,6 +22,7 @@
- #include "chrome/browser/ui/views/extensions/extension_action_delegate_desktop.h"
- #include "chrome/browser/ui/views/extensions/extensions_container_views.h"
- #include "chrome/browser/ui/views/extensions/extensions_menu_item_view.h"
-+#include "chrome/browser/ui/views/frame/browser_view.h"
- #include "chrome/grit/generated_resources.h"
- #include "components/vector_icons/vector_icons.h"
- #include "extensions/common/extension_features.h"
-@@ -74,5 +75,6 @@
-     ExtensionsContainer* extensions_container,
-     ExtensionsContainerViews* extensions_container_views)
--    : BubbleDialogDelegateView(anchor, views::BubbleBorder::Arrow::TOP_RIGHT),
-+    : BubbleDialogDelegateView(
-+          anchor, BrowserView::GetSidebarBubbleArrow(anchor)),
-       browser_(browser),
-       extensions_container_(CHECK_DEREF(extensions_container)),
 --- a/chrome/browser/ui/views/profiles/profile_menu_view_base.cc
 +++ b/chrome/browser/ui/views/profiles/profile_menu_view_base.cc
 @@ -26,6 +26,7 @@
@@ -1475,6 +1417,15 @@
  
    // The container (and extensions-menu button) should not be visible if we have
    // no extensions.
+@@ -1289,7 +1310,7 @@
+ }
+ 
+ views::BubbleBorder::Arrow ExtensionsToolbarDesktop::GetPopupArrow() const {
+-  return views::BubbleBorder::TOP_RIGHT;
++  return BrowserView::GetSidebarBubbleArrow(this);
+ }
+ 
+ void ExtensionsToolbarDesktop::OnMouseExited(const ui::MouseEvent& event) {
 --- a/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc
 +++ b/chrome/browser/ui/views/download/bubble/download_toolbar_ui_controller.cc
 @@ -981,8 +981,10 @@
