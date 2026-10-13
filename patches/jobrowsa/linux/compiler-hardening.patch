@@ -1,16 +1,16 @@
 --- a/build/config/compiler/BUILD.gn
 +++ b/build/config/compiler/BUILD.gn
-@@ -490,6 +490,13 @@ config("compiler") {
-         "-fstack-clash-protection",
-         "-mharden-sls=all",
-       ]
+@@ -477,6 +477,13 @@ config("compiler") {
+       "-fstack-clash-protection",
+       "-mharden-sls=all",
+     ]
 +
-+      if (is_clang && !is_debug && !using_sanitizer && use_sysroot) {
-+        cflags += [
-+          "-U_FORTIFY_SOURCE",
-+          "-D_FORTIFY_SOURCE=3",
-+        ]
-+      }
-     }
++    if (is_clang && !is_debug && !using_sanitizer && use_sysroot) {
++      cflags += [
++        "-U_FORTIFY_SOURCE",
++        "-D_FORTIFY_SOURCE=3",
++      ]
++    }
    }
  
+   # Non-Apple Posix and Fuchsia compiler flags setup.
