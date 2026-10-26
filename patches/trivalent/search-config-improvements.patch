@@ -18,8 +18,8 @@ index 0865e26..3e59664 100644
      // use a lower number. This number is used by UMA stats and must be updated
      // to include the full range or else not all engines will be counted in
      // stats.
--    "kMaxPrepopulatedEngineID": 116,
-+    "kMaxPrepopulatedEngineID": 117,
+-    "kMaxPrepopulatedEngineID": 117,
++    "kMaxPrepopulatedEngineID": 118,
  
      // Increment this if you change the data in ways that mean users with
      // existing data should get a new version. Otherwise, existing data may

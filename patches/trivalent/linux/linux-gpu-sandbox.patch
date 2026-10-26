@@ -375,15 +375,13 @@ index e263d95cc3..8359e1440d 100644
  namespace {
  
  void KillGpuProcessImpl(content::GpuProcessHost* host) {
-@@ -83,6 +87,25 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
+@@ -83,6 +87,23 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
    gpu_preferences.gpu_sandbox_start_early =
        command_line->HasSwitch(switches::kGpuSandboxStartEarly);
  
 +  gpu_preferences.gpu_sandbox_linux =
 +#if BUILDFLAG(IS_LINUX)
-+      command_line->HasSwitch("enable-gpu-sandbox-linux") &&
-+      command_line->HasSwitch("ozone-platform") &&
-+      command_line->GetSwitchValueASCII("ozone-platform") == "wayland";
++      command_line->HasSwitch("enable-gpu-sandbox-linux");
 +#else
 +      false;
 +#endif
@@ -488,7 +486,7 @@ index 09780f226f..b40e4392ec 100644
  bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
                                          const GpuPreferences& gpu_preferences) {
    TRACE_EVENT("gpu,startup", "gpu::GpuInit::InitializeAndStartSandbox");
-@@ -433,8 +445,21 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
+@@ -433,8 +445,22 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
    enable_watchdog = false;
  #endif
  
@@ -506,12 +504,13 @@ index 09780f226f..b40e4392ec 100644
 +    }
 +  }
 +  bool gpu_sandbox_start_early = gpu_preferences_.gpu_sandbox_start_early ||
-+      // The sandbox does not work with Vulkan currently
-+      (gpu_sandbox_linux && !features::IsUsingVulkan());
++      // The sandbox does not work with Vulkan currently or x11
++      (gpu_sandbox_linux && !features::IsUsingVulkan() &&
++       ui::OzonePlatform::RunningOnWaylandForTest());
  #else   // !(BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS))
    // For some reasons MacOSX's VideoToolbox might crash when called after
    // initializing GL, see crbug.com/1047643 and crbug.com/871280. On other
-@@ -476,7 +501,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
+@@ -476,7 +502,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
    // On Chrome OS ARM Mali, GPU driver userspace creates threads when
    // initializing a GL context, so start the sandbox early.
    // TODO(zmo): Need to collect OS version before this.
@@ -520,107 +519,6 @@ index 09780f226f..b40e4392ec 100644
      gpu_info_.sandboxed = sandbox_helper_->EnsureSandboxInitialized(
          watchdog_thread_.get(), &gpu_info_, gpu_preferences_);
      attempted_startsandbox = true;
-diff --git a/sandbox/policy/linux/bpf_cros_nvidia_gpu_policy_linux.cc b/sandbox/policy/linux/bpf_cros_nvidia_gpu_policy_linux.cc
-index c4e4614eb8..8b2bf9aadf 100644
---- a/sandbox/policy/linux/bpf_cros_nvidia_gpu_policy_linux.cc
-+++ b/sandbox/policy/linux/bpf_cros_nvidia_gpu_policy_linux.cc
-@@ -3,6 +3,8 @@
- // found in the LICENSE file.
- 
- #include "sandbox/policy/linux/bpf_cros_nvidia_gpu_policy_linux.h"
-+#include "sandbox/linux/seccomp-bpf-helpers/syscall_parameters_restrictions.h"
-+#include <sys/mman.h>
- 
- // Define these so that unistd.h pulls in needed symbols.
- #if !defined(__ARCH_WANT_SYSCALL_NO_AT) || \
-@@ -29,7 +31,17 @@ CrosNvidiaGpuProcessPolicy::~CrosNvidiaGpuProcessPolicy() = default;
- ResultExpr CrosNvidiaGpuProcessPolicy::EvaluateSyscall(int sysno) const {
-   switch (sysno) {
-     case __NR_sched_setscheduler:
-+    case __NR_mprotect:
-       return Allow();
-+    case __NR_mmap:
-+#if defined(__x86_64__)
-+      return RestrictMmapFlags(MAP_EXECUTABLE | MAP_32BIT);
-+#else
-+      return Allow();
-+#endif
-+    case __NR_memfd_create:
-+      // TODO(crbug.com/442771181)
-+      return RestrictMemfdCreateWithExecMappings();
-     default:
-       return GpuProcessPolicy::EvaluateSyscall(sysno);
-   }
-diff --git a/sandbox/policy/linux/bpf_gpu_policy_linux.cc b/sandbox/policy/linux/bpf_gpu_policy_linux.cc
-index 5725da248d..17c098db3f 100644
---- a/sandbox/policy/linux/bpf_gpu_policy_linux.cc
-+++ b/sandbox/policy/linux/bpf_gpu_policy_linux.cc
-@@ -52,22 +52,8 @@ ResultExpr GpuProcessPolicy::EvaluateSyscall(int sysno) const {
-       return Error(ENOSYS);
- #if !BUILDFLAG(IS_CHROMEOS)
-     case __NR_fallocate:
--      return Allow();
- #endif  // BUILDFLAG(IS_CHROMEOS)
--    case __NR_fcntl: {
--      // The Nvidia driver uses flags not in the baseline policy
--      // fcntl(fd, F_ADD_SEALS, F_SEAL_SEAL | F_SEAL_SHRINK | F_SEAL_GROW)
--      // https://crbug.com/1128175
--      const Arg<unsigned int> cmd(1);
--      const Arg<unsigned long> arg(2);
--
--      const unsigned long kAllowedMask =
--          F_SEAL_SEAL | F_SEAL_SHRINK | F_SEAL_GROW;
--      BoolExpr add_seals =
--          AllOf(cmd == F_ADD_SEALS, (arg & ~kAllowedMask) == 0);
--
--      return If(add_seals, Allow()).Else(BPFBasePolicy::EvaluateSyscall(sysno));
--    }
-+    case __NR_fcntl:
-     case __NR_fdatasync:
-     case __NR_ftruncate:
- #if defined(__i386__) || defined(__arm__) || \
-@@ -80,17 +66,6 @@ ResultExpr GpuProcessPolicy::EvaluateSyscall(int sysno) const {
-     case __NR_getdents64:
-     case __NR_ioctl:
-       return Allow();
--#if defined(__i386__) || defined(__x86_64__) || defined(__mips__)
--    // The Nvidia driver uses flags not in the baseline policy
--    // (MAP_LOCKED | MAP_EXECUTABLE | MAP_32BIT)
--    case __NR_mmap:
--      return Allow();
--#endif
--    // We also hit this on the linux_chromeos bot but don't yet know what
--    // weird flags were involved.
--    case __NR_mprotect:
--      return Allow();
--    // XNNPACK needs mremap when building weight caches.
-     case __NR_mremap:
-       if (mremap_policy_ == MremapPolicy::kAllow) {
-         return RestrictMremapFlagsForODML();
-@@ -106,10 +81,6 @@ ResultExpr GpuProcessPolicy::EvaluateSyscall(int sysno) const {
-       return RestrictSchedTarget(GetPolicyPid(), sysno);
-     case __NR_prlimit64:
-       return RestrictPrlimit64(GetPolicyPid());
--    case __NR_memfd_create:
--      // TODO(crbug.com/442771181): Only nvidia drivers seems to use this. Maybe
--      // scope this allowance to only nvidia drivers.
--      return RestrictMemfdCreateWithExecMappings();
-     default:
-       break;
-   }
-diff --git a/sandbox/policy/linux/sandbox_seccomp_bpf_linux.cc b/sandbox/policy/linux/sandbox_seccomp_bpf_linux.cc
-index 73bf31cb28..b198172a9d 100644
---- a/sandbox/policy/linux/sandbox_seccomp_bpf_linux.cc
-+++ b/sandbox/policy/linux/sandbox_seccomp_bpf_linux.cc
-@@ -121,7 +121,7 @@ inline bool IsArchitectureArm() {
- std::unique_ptr<BPFBasePolicy> GetGpuProcessSandbox(
-     const SandboxSeccompBPF::Options& options,
-     MremapPolicy mremap_policy) {
--  if (IsChromeOS() || UseChromecastSandboxAllowlist()) {
-+  if (true) {
-     if (IsArchitectureArm()) {
-       return std::make_unique<CrosArmGpuProcessPolicy>(
-           mremap_policy, base::CommandLine::ForCurrentProcess()->HasSwitch(
 diff --git a/sandbox/policy/linux/sandbox_seccomp_bpf_linux.h b/sandbox/policy/linux/sandbox_seccomp_bpf_linux.h
 index 7fe9953416..1b660058c4 100644
 --- a/sandbox/policy/linux/sandbox_seccomp_bpf_linux.h

@@ -8,7 +8,7 @@ Subject: [PATCH] disable fetching optimization hints by default
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/components/optimization_guide/core/optimization_guide_features.cc b/components/optimization_guide/core/optimization_guide_features.cc
-index e5247c3149efd..6351251f84ac4 100644
+index 21f35f82b2053..9f1ce492686b6 100644
 --- a/components/optimization_guide/core/optimization_guide_features.cc
 +++ b/components/optimization_guide/core/optimization_guide_features.cc
 @@ -57,7 +57,7 @@ constexpr auto enabled_by_default_mobile_only =

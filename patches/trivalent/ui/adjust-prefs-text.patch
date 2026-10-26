@@ -49,14 +49,15 @@ index 51af5ee843..d6e8f04729 100644
        r.ACCOUNT = r.PEOPLE.createChild('/account');
        r.GOOGLE_SERVICES = r.PEOPLE.createChild('/googleServices');
 diff --git a/chrome/browser/resources/settings/settings_menu/settings_menu.html b/chrome/browser/resources/settings/settings_menu/settings_menu.html
+index 0d30190f42..be8380adde 100644
 --- a/chrome/browser/resources/settings/settings_menu/settings_menu.html
 +++ b/chrome/browser/resources/settings/settings_menu/settings_menu.html
-@@ -54,7 +54,7 @@
+@@ -95,7 +95,7 @@
  <if expr="_google_chrome">
            <cr-icon icon="settings-internal:google-g"></cr-icon>
  </if>
--          $i18n{peoplePageTitle}
-+          $i18n{editPerson}
+-          <span class="menu-label">$i18n{peoplePageTitle}</span>
++          <span class="menu-label">$i18n{editPerson}</span>
            <cr-ripple></cr-ripple>
          </a>
          <a role="menuitem" id="appearance" href="/appearance"

@@ -8,7 +8,7 @@ Subject: [PATCH] disable fetching optimization guides by default
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/components/optimization_guide/core/optimization_guide_features.cc b/components/optimization_guide/core/optimization_guide_features.cc
-index 389050b1f655b..e5247c3149efd 100644
+index 075524a7d03d7..21f35f82b2053 100644
 --- a/components/optimization_guide/core/optimization_guide_features.cc
 +++ b/components/optimization_guide/core/optimization_guide_features.cc
 @@ -82,7 +82,7 @@ BASE_FEATURE(kOverrideNumThreadsForModelExecution,
