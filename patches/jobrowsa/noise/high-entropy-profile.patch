@@ -180,10 +180,11 @@ Index: src/third_party/blink/renderer/core/workers/dedicated_worker_test.cc
  #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
  #include "third_party/blink/public/mojom/v8_cache_options.mojom-blink.h"
  #include "third_party/blink/public/mojom/worker/dedicated_worker_host.mojom-blink.h"
-@@ -32,6 +33,7 @@
+@@ -32,7 +33,8 @@
  #include "third_party/blink/renderer/core/execution_context/execution_context.h"
  #include "third_party/blink/renderer/core/frame/local_dom_window.h"
  #include "third_party/blink/renderer/core/frame/local_frame.h"
+ #include "third_party/blink/renderer/core/frame/web_feature.h"
 +#include "third_party/blink/renderer/core/helium_noise/helium_noise_profile.h"
  #include "third_party/blink/renderer/core/inspector/thread_debugger_common_impl.h"
  #include "third_party/blink/renderer/core/loader/empty_clients.h"
@@ -637,9 +638,9 @@ Index: src/third_party/blink/renderer/core/page/page.cc
  #include "third_party/blink/renderer/core/frame/visual_viewport.h"
  #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 +#include "third_party/blink/renderer/core/helium_noise/helium_noise_profile.h"
- #include "third_party/blink/renderer/core/html/fenced_frame/document_fenced_frames.h"
  #include "third_party/blink/renderer/core/html/media/html_media_element.h"
  #include "third_party/blink/renderer/core/inspector/console_message.h"
+ #include "third_party/blink/renderer/core/inspector/console_message_storage.h"
 @@ -1349,6 +1350,7 @@ void Page::Trace(Visitor* visitor) const
    visitor->Trace(v8_compile_hints_consumer_);
    visitor->Trace(close_task_handler_);
