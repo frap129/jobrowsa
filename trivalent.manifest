@@ -98,7 +98,7 @@ patches/third_party/vanadium/0242-Further-disable-password-leak-detection-checks
 patches/third_party/vanadium/0120-require-HTTPS-for-component-updates.patch c4b41f10027425a2323a424d6a4d378176fe5d30 pristine
 patches/third_party/vanadium/0075-disable-article-suggestions-feature-by-default.patch a8e4e0a788b7322de44d7408581e6b28bcaf34c3 pristine
 patches/third_party/vanadium/0097-Disable-newer-privacy-sandbox-features-by-default.patch f7b7798f7a39321bfdcb523df460a3d433c7efca dropped
-patches/third_party/vanadium/modified-fix-build-after-changes-in-ScopeIterator.patch 2615000b7c44293e9e92aea5406c70409aa3182c pristine
+patches/third_party/vanadium/modified-fix-build-after-changes-in-ScopeIterator.patch 2615000b7c44293e9e92aea5406c70409aa3182c dropped
 patches/third_party/vanadium/0077-disable-sensors-access-by-default.patch 4cb099bf294a88e90b54ad2f6770edf84312d79d pristine
 patches/third_party/vanadium/0095-disable-GaiaAuthFetcher-code-due-to-upstream-bug.patch 55b54a3a6a309876e867bd5b689a3c5610d1a082 dropped
 patches/third_party/vanadium/0085-disable-browser-sign-in-feature-by-default.patch 649355ba38985b3f7b9f85030d019d7c0649626d dropped
@@ -121,6 +121,6 @@ patches/third_party/vanadium/0108-disable-appending-variations-header.patch 016c
 patches/third_party/vanadium/0128-Enable-reduce-accept-language-header-by-default.patch 2acaa9454688e2a0f8db537954138279d8279a58 dropped
 patches/third_party/vanadium/0110-disable-fetching-optimization-guides-by-default.patch bf6c0d7fb1613ce5a83dec0504321c9ff421ec83 pristine
 patches/third_party/vanadium/0089-disable-autofill-server-communication-by-default.patch 92b86e4df365004eb64f70abfd60ff68913b9652 pristine
-patches/third_party/vanadium/modified-fix-build-after-changes-in-WasmTrustedInstanceData.patch 0173a23c3789cba571cf1e4400b0bdd0c52bccb8 pristine
+patches/third_party/vanadium/modified-fix-build-after-changes-in-WasmTrustedInstanceData.patch 0173a23c3789cba571cf1e4400b0bdd0c52bccb8 dropped
 patches/third_party/vanadium/0086-disable-safe-browsing-reporting-opt-in-by-default.patch 8404b37bd3d948f27961c312ea52a34e0a1752f0 dropped
 patches/third_party/vanadium/0244-enable-more-Local-Network-Access-coverage-checks-by-.patch 3d9463671ad4881b5831031ca326a207880d5890 pristine

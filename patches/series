@@ -40,8 +40,6 @@ vanadium/0246-Enable-origin-keyed-process-isolation-by-default.patch
 vanadium/modified-Restriction-of-dynamic-code-execution-via-seccomp-bp.patch
 vanadium/modified-block-playing-protected-media-by-default.patch
 vanadium/modified-disable-seed-based-field-trials.patch
-vanadium/modified-fix-build-after-changes-in-ScopeIterator.patch
-vanadium/modified-fix-build-after-changes-in-WasmTrustedInstanceData.patch
 
 trivalent/add-dark-mode-toolbar-toggle.patch
 trivalent/add-feature-to-toggle-middlemouse-copypaste.patch
