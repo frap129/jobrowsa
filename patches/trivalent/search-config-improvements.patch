@@ -384,7 +384,7 @@ index 3dbadbd..1b5d804 100644
          "&seznam",
          "&brave",
          "&duckduckgo",
-@@ -426,19 +488,22 @@
+@@ -426,20 +488,23 @@
      },
      "DE": {
        "search_engines": [
@@ -395,10 +395,10 @@ index 3dbadbd..1b5d804 100644
          "&duckduckgo",
          "&brave",
          "&ecosia",
+         "&perplexity",
          "&bing",
 -        "&startpage",
-         "&yahoo_de",
-         "&qwant"
+         "&yahoo_de"
        ]
      },
      "DK": {
@@ -409,6 +409,7 @@ index 3dbadbd..1b5d804 100644
 +        "&google",
          "&brave",
          "&duckduckgo",
+         "&perplexity",
          "&bing",
 @@ -450,7 +515,9 @@
      },
@@ -827,11 +828,11 @@ index 3dbadbd..1b5d804 100644
 +        "&google",
          "&duckduckgo",
          "&brave",
-         "&bing",
          "&ecosia",
+         "&perplexity",
+         "&bing",
 -        "&startpage",
-         "&qwant",
-         "&privacywall"
+         "&qwant"
        ]
      },
      "LK": {
