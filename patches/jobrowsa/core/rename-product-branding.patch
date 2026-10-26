@@ -23,6 +23,6 @@
  
 -  const char* product_name = "Helium";
 +  const char* product_name = "Jobrowsa";
-   *product_info =
-       ProductInfo(product_name, version_info::GetHeliumVersionNumber(),
-                   chrome::GetChannelName(chrome::WithExtendedStable(true)));
+ 
+ #if BUILDFLAG(IS_ANDROID)
+   std::string_view version = version_info::GetVersionNumber();
