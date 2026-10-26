@@ -137,15 +137,14 @@ Index: src/components/extstore_fixups/chrome-webstore.js
 ===================================================================
 --- src.orig/components/extstore_fixups/chrome-webstore.js
 +++ src/components/extstore_fixups/chrome-webstore.js
-@@ -24,7 +24,7 @@
+@@ -21,6 +21,6 @@
+   const replaceDownloadButtonText = (el) => {
+     if (el.nodeType === Node.TEXT_NODE) {
+-      const replacement = el.nodeValue.replace(CHROME_NAME_REGEX, 'Helium');
++      const replacement = el.nodeValue.replace(CHROME_NAME_REGEX, 'Jobrowsa');
+       if (replacement === el.nodeValue) {
          return false;
        }
- 
--      el.nodeValue = el.nodeValue.replace(/\b(Google\s)?Chrome\b/, 'Helium');
-+      el.nodeValue = el.nodeValue.replace(/\b(Google\s)?Chrome\b/, 'Jobrowsa');
-       return true;
-     } else if (el.childNodes) {
-       for (const node of el.childNodes) {
 Index: src/third_party/ublock/assets/assets.json
 ===================================================================
 --- src.orig/third_party/ublock/assets/assets.json
