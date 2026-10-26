@@ -1,13 +1,13 @@
 --- a/chrome/browser/ui/BUILD.gn
 +++ b/chrome/browser/ui/BUILD.gn
-@@ -2772,6 +2772,7 @@
+@@ -3559,6 +3559,7 @@
+       "views/helium/frame_corner_radius.h",
+       "views/helium/native_frame_materials.cc",
        "views/helium/native_frame_materials.h",
-       "views/tab_search_bubble_host.cc",
-       "views/tab_search_bubble_host.h",
 +      "views/tabs/vertical/vertical_tab_strip_header_view.cc",
-       "views/web_apps/frame_toolbar/web_app_frame_toolbar_view.cc",
-       "views/web_apps/frame_toolbar/web_app_frame_toolbar_view.h",
-       "views/web_apps/frame_toolbar/web_app_menu_button.cc",
+     ]
+ 
+     sources += get_target_outputs(":webui_name_variants")
 --- a/chrome/browser/ui/views/tabs/vertical/BUILD.gn
 +++ b/chrome/browser/ui/views/tabs/vertical/BUILD.gn
 @@ -12,6 +12,7 @@
@@ -131,9 +131,9 @@
  void HeliumLayoutStateController::SetBrowserLayout(HeliumLayoutType layout) {
    pref_service_->SetInteger(prefs::kHeliumLayout, std::to_underlying(layout));
  }
---- a/chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h
-+++ b/chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h
-@@ -143,6 +143,8 @@
+--- a/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_impl.h
++++ b/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_impl.h
+@@ -78,6 +78,8 @@
  
    void OnModeChanged();
    void OnExpandOnHoverEnabledChanged();
@@ -142,12 +142,12 @@
  
    // Directly sets the collapse state.
    void SetCollapsed(bool collapsed);
---- a/chrome/browser/ui/tabs/vertical_tab_strip_state_controller.cc
-+++ b/chrome/browser/ui/tabs/vertical_tab_strip_state_controller.cc
-@@ -212,6 +212,10 @@
+--- a/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_impl.cc
++++ b/chrome/browser/ui/tabs/vertical_tab_strip_state_controller_impl.cc
+@@ -209,6 +209,10 @@
  }
  
- void VerticalTabStripStateController::RequestCollapse(bool collapse) {
+ void VerticalTabStripStateControllerImpl::RequestCollapse(bool collapse) {
 +  if (collapse && IsCollapseDisabled()) {
 +    return;
 +  }
@@ -155,20 +155,20 @@
    if (!delegate_) {
      return;
    }
-@@ -440,6 +444,13 @@
+@@ -419,6 +423,13 @@
    }
  }
  
-+bool VerticalTabStripStateController::IsCollapseDisabled() const {
++bool VerticalTabStripStateControllerImpl::IsCollapseDisabled() const {
 +  const auto* helium_controller =
-+      HeliumLayoutStateController::From(browser_window_);
++      HeliumLayoutStateController::From(&*browser_window_);
 +  return helium_controller &&
 +         helium_controller->IsVerticalAddressBarInSidebar();
 +}
 +
- void VerticalTabStripStateController::MaybeShowExpandOnHoverIPH() {}
+ void VerticalTabStripStateControllerImpl::MaybeShowExpandOnHoverIPH() {}
  
- void VerticalTabStripStateController::MaybeShowDelayedToast(bool new_enabled) {
+ void VerticalTabStripStateControllerImpl::MaybeShowDelayedToast(
 --- a/chrome/browser/ui/browser_command_controller.cc
 +++ b/chrome/browser/ui/browser_command_controller.cc
 @@ -719,6 +719,12 @@
@@ -280,20 +280,20 @@
  #include "chrome/browser/ui/web_applications/app_browser_controller.h"
  #include "chrome/grit/generated_resources.h"
  #include "components/tabs/public/tab_group.h"
-@@ -123,6 +124,13 @@
-                                    views::MinimumFlexSizeRule::kPreferred,
-                                    views::MaximumFlexSizeRule::kPreferred));
+@@ -135,6 +135,13 @@
+   content_area_view_ = AddChildView(std::move(content_area_view));
+   content_area_view_->SetPaintToLayer();
+   content_area_view_->layer()->SetFillsBoundsOpaquely(false);
  
-+  header_view_ =
-+      AddChildView(std::make_unique<VerticalTabStripHeaderView>(browser_view));
++  header_view_ = content_area_view_->AddChildView(
++      std::make_unique<VerticalTabStripHeaderView>(browser_view));
 +  header_view_->SetProperty(
 +      views::kFlexBehaviorKey,
 +      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
 +                               views::MaximumFlexSizeRule::kPreferred));
 +
-   bottom_button_container_ =
-       AddChildView(std::make_unique<VerticalTabStripBottomContainer>(
-           state_controller_, root_action_item, browser_view->browser(),
+   // --------------
+   // Views that go into the content area below
 @@ -262,6 +270,12 @@
      return false;
    }
@@ -391,18 +391,15 @@
  #include "ui/views/controls/button/button.h"
  #include "ui/views/controls/webview/unhandled_keyboard_event_handler.h"
  #include "ui/views/interaction/view_subregion_anchor.h"
-@@ -123,9 +124,11 @@
- }
- 
+@@ -133,6 +133,8 @@
  namespace views {
 +class BubbleAnchor;
  class EventMonitor;
  class LabelButton;
+ class NativeViewHost;
  class WebView;
 +enum class MenuAnchorPosition;
  }  // namespace views
- 
- ///////////////////////////////////////////////////////////////////////////////
 @@ -427,6 +430,13 @@
    float GetSideChromeRevealRatio() const;
    bool IsZenModeSideChromePinned() const;
