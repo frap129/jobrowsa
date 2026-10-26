@@ -42,7 +42,7 @@ diff --git a/chrome/browser/about_flags.cc b/chrome/browser/about_flags.cc
  #if !BUILDFLAG(IS_ANDROID)
  const FeatureEntry::Choice kIwaKeyDistributionComponentExpCohortChoices[] = {
      {flags_ui::kGenericExperimentChoiceDisabled, "", ""},
-@@ -4874,10 +4896,83 @@ const FeatureEntry::FeatureVariation kToolbarGlowUpVariations[] = {
+@@ -4874,11 +4896,84 @@ const FeatureEntry::FeatureVariation kToolbarGlowUpVariations[] = {
  #include "chrome/browser/ungoogled_platform_flag_choices.h"
  #include "chrome/browser/existing_switch_flag_choices.h"
  const FeatureEntry kFeatureEntries[] = {
@@ -123,6 +123,7 @@ diff --git a/chrome/browser/about_flags.cc b/chrome/browser/about_flags.cc
  #include "chrome/browser/ungoogled_flag_entries.h"
  #include "chrome/browser/bromite_flag_entries.h"
  #include "chrome/browser/ungoogled_platform_flag_entries.h"
+ #include "chrome/browser/existing_switch_flag_entries.h"
  // Include generated flags for flag unexpiry; see //docs/flag_expiry.md and
  // //tools/flags/generate_unexpire_flags.py.
 
